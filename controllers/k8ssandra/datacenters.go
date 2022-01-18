@@ -66,7 +66,15 @@ func (r *K8ssandraClusterReconciler) reconcileDatacenters(ctx context.Context, k
 		if medusaResult := r.ReconcileMedusa(ctx, dcConfig, dcTemplate, kc, logger); medusaResult.Completed() {
 			return medusaResult, actualDcs
 		}
-		desiredDc, err := cassandra.NewDatacenter(kcKey, dcConfig)
+
+		remoteClient, err := r.ClientCache.GetRemoteClient(dcTemplate.K8sContext)
+		if err != nil {
+			logger.Error(err, "Failed to get remote client")
+			return result.Error(err), actualDcs
+		}
+
+		encryptionPasswords, err := cassandra.ReadEncryptionStoresSecrets(ctx, kcKey, dcConfig, remoteClient)
+		desiredDc, err := cassandra.NewDatacenter(kcKey, dcConfig, encryptionPasswords)
 		if err != nil {
 			logger.Error(err, "Failed to create new CassandraDatacenter")
 			return result.Error(err), actualDcs
@@ -77,12 +85,6 @@ func (r *K8ssandraClusterReconciler) reconcileDatacenters(ctx context.Context, k
 		annotations.AddHashAnnotation(desiredDc)
 
 		actualDc := &cassdcapi.CassandraDatacenter{}
-
-		remoteClient, err := r.ClientCache.GetRemoteClient(dcTemplate.K8sContext)
-		if err != nil {
-			logger.Error(err, "Failed to get remote client")
-			return result.Error(err), actualDcs
-		}
 
 		if recResult := r.reconcileSeedsEndpoints(ctx, desiredDc, seeds, remoteClient, logger); recResult.Completed() {
 			return recResult, actualDcs

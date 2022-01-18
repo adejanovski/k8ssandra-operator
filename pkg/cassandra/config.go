@@ -77,12 +77,12 @@ func (c config) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&config)
 }
 
-func newConfig(apiConfig api.CassandraConfig, cassandraVersion string) (config, error) {
+func newConfig(apiConfig api.CassandraConfig, cassandraVersion string, encryptionStoresSecrets EncryptionStoresPasswords) (config, error) {
 	// Filters out config element which do not exist in the Cassandra version in use
-	filteredConfig := apiConfig.DeepCopy()
-	filterConfigForVersion(cassandraVersion, filteredConfig)
+	filteredConfig := addEncryptionOptions(&apiConfig, encryptionStoresSecrets)
+	filterConfigForVersion(cassandraVersion, &filteredConfig)
 	cfg := config{CassandraYaml: filteredConfig.CassandraYaml, cassandraVersion: cassandraVersion}
-	err := validateConfig(filteredConfig)
+	err := validateConfig(&filteredConfig)
 	if err != nil {
 		return cfg, err
 	}
@@ -101,6 +101,35 @@ func newConfig(apiConfig api.CassandraConfig, cassandraVersion string) (config, 
 	cfg.additionalJvmOptions = filteredConfig.JvmOptions.AdditionalOptions
 
 	return cfg, nil
+}
+
+func addEncryptionOptions(apiConfig *api.CassandraConfig, encryptionStoresSecrets EncryptionStoresPasswords) api.CassandraConfig {
+	updatedConfig := apiConfig.DeepCopy()
+	if updatedConfig.CassandraYaml.ClientEncryptionOptions == nil && updatedConfig.CassandraYaml.ServerEncryptionOptions == nil {
+		return *updatedConfig
+	}
+
+	if updatedConfig.CassandraYaml.ClientEncryptionOptions != nil {
+		if updatedConfig.CassandraYaml.ClientEncryptionOptions.Enabled {
+			keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("client", "keystore"), "keystore")
+			truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("client", "truststore"), "truststore")
+			updatedConfig.CassandraYaml.ClientEncryptionOptions.Keystore = pointer.String(keystorePath)
+			updatedConfig.CassandraYaml.ClientEncryptionOptions.Truststore = pointer.String(truststorePath)
+			updatedConfig.CassandraYaml.ClientEncryptionOptions.KeystorePassword = &encryptionStoresSecrets.ClientKeystorePassword
+			updatedConfig.CassandraYaml.ClientEncryptionOptions.TruststorePassword = &encryptionStoresSecrets.ClientTruststorePassword
+		}
+	}
+	if updatedConfig.CassandraYaml.ServerEncryptionOptions != nil {
+		if updatedConfig.CassandraYaml.ServerEncryptionOptions.Enabled {
+			keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "keystore"), "keystore")
+			truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "truststore"), "truststore")
+			updatedConfig.CassandraYaml.ServerEncryptionOptions.Keystore = pointer.String(keystorePath)
+			updatedConfig.CassandraYaml.ServerEncryptionOptions.Truststore = pointer.String(truststorePath)
+			updatedConfig.CassandraYaml.ServerEncryptionOptions.KeystorePassword = &encryptionStoresSecrets.ServerKeystorePassword
+			updatedConfig.CassandraYaml.ServerEncryptionOptions.TruststorePassword = &encryptionStoresSecrets.ServerTruststorePassword
+		}
+	}
+	return *updatedConfig
 }
 
 // Some settings in Cassandra are using a float type, which isn't supported for CRDs.
@@ -299,8 +328,8 @@ func AllowAlterRfDuringRangeMovement(dcConfig *DatacenterConfig) {
 
 // CreateJsonConfig parses dcConfig into a raw JSON base64-encoded string. If config is nil
 // then nil, nil is returned
-func CreateJsonConfig(config api.CassandraConfig, cassandraVersion string) ([]byte, error) {
-	cfg, err := newConfig(config, cassandraVersion)
+func CreateJsonConfig(config api.CassandraConfig, cassandraVersion string, encryptionStoresSecrets EncryptionStoresPasswords) ([]byte, error) {
+	cfg, err := newConfig(config, cassandraVersion, encryptionStoresSecrets)
 	if err != nil {
 		return nil, err
 	}
