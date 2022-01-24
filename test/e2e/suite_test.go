@@ -4,11 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/k8ssandra/k8ssandra-operator/pkg/labels"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/k8ssandra/k8ssandra-operator/pkg/labels"
 
 	"github.com/k8ssandra/k8ssandra-operator/test/kustomize"
 	"github.com/rs/zerolog"
@@ -127,6 +128,16 @@ func TestOperator(t *testing.T) {
 		testFunc:      multiDcAuthOnOff,
 		fixture:       "multi-dc-auth",
 		deployTraefik: true,
+	}))
+	t.Run("SingleDcEncryption", e2eTest(ctx, &e2eTestOpts{
+		testFunc:      createSingleDatacenterCluster,
+		fixture:       "single-dc-encryption",
+		deployTraefik: false,
+	}))
+	t.Run("MultiDcEncryption", e2eTest(ctx, &e2eTestOpts{
+		testFunc:      checkStargateApisWithMultiDcCluster,
+		fixture:       "multi-dc-encryption",
+		deployTraefik: false,
 	}))
 }
 

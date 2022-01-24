@@ -94,6 +94,38 @@ func (r *K8ssandraClusterReconciler) reconcileDatacenters(ctx context.Context, k
 			return recResult, actualDcs
 		}
 
+		desiredConfig, err := utils.UnmarshalToMap(desiredDc.Spec.Config)
+		if err != nil {
+			return result.Error(err), actualDcs
+		}
+
+		logger.Info("About to reconcile stargate configmap")
+		if dcTemplate.Stargate != nil {
+			logger.Info("Stargate is not nil, reconciling configmap")
+			namespace := dcTemplate.Meta.Namespace
+			if namespace == "" {
+				namespace = kc.Namespace
+			}
+			// if a configmap is specified, we need to read its content to merge it with the generated one
+			userConfigMapContent := ""
+			if dcTemplate.Stargate.CassandraConfigMapRef != nil {
+				userConfigMap := &corev1.ConfigMap{}
+				configMapKey := types.NamespacedName{Namespace: namespace, Name: dcTemplate.Stargate.CassandraConfigMapRef.Name}
+				err := remoteClient.Get(ctx, configMapKey, userConfigMap)
+				if err != nil {
+					logger.Error(err, "Failed to get configmap")
+					return result.Error(err), actualDcs
+				}
+				userConfigMapContent = userConfigMap.Data["cassandra.yaml"]
+			}
+
+			logger.Info("Reconciling Stargate configmap")
+			// Reconcile the Stargate cassandra-config configmap using the desiredConfig content marshalled to yaml
+			if stargateConfigResult := r.reconcileStargateConfigMap(ctx, remoteClient, kc, desiredConfig, userConfigMapContent, namespace, logger); stargateConfigResult.Completed() {
+				return stargateConfigResult, actualDcs
+			}
+		}
+
 		if err = remoteClient.Get(ctx, dcKey, actualDc); err == nil {
 			// cassdc already exists, we'll update it
 			if err = r.setStatusForDatacenter(kc, actualDc); err != nil {
@@ -111,10 +143,6 @@ func (r *K8ssandraClusterReconciler) reconcileDatacenters(ctx context.Context, k
 					logger.Error(err, "SuperuserSecretName is immutable, reverting to existing value in CassandraDatacenter")
 				}
 
-				desiredConfig, err := utils.UnmarshalToMap(desiredDc.Spec.Config)
-				if err != nil {
-					return result.Error(err), actualDcs
-				}
 				actualConfig, err := utils.UnmarshalToMap(actualDc.Spec.Config)
 				if err != nil {
 					return result.Error(err), actualDcs

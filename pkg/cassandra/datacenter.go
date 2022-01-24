@@ -7,6 +7,7 @@ import (
 	cassdcapi "github.com/k8ssandra/cass-operator/apis/cassandra/v1beta1"
 	"github.com/k8ssandra/cass-operator/pkg/reconciliation"
 	api "github.com/k8ssandra/k8ssandra-operator/apis/k8ssandra/v1alpha1"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/encryption"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/images"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,23 +42,25 @@ type SystemReplication struct {
 // to be specified at the DC-level. Using a DatacenterConfig allows to keep the api types
 // clean such that cluster-level settings won't leak into the dc-level settings.
 type DatacenterConfig struct {
-	Meta                  api.EmbeddedObjectMeta
-	Cluster               string
-	SuperuserSecretRef    corev1.LocalObjectReference
-	ServerImage           string
-	ServerVersion         string
-	JmxInitContainerImage *images.Image
-	Size                  int32
-	Resources             *corev1.ResourceRequirements
-	SystemReplication     SystemReplication
-	StorageConfig         *cassdcapi.StorageConfig
-	Racks                 []cassdcapi.Rack
-	CassandraConfig       api.CassandraConfig
-	AdditionalSeeds       []string
-	Networking            *cassdcapi.NetworkingConfig
-	Users                 []cassdcapi.CassandraUser
-	PodTemplateSpec       *corev1.PodTemplateSpec
-	MgmtAPIHeap           *resource.Quantity
+	Meta                   api.EmbeddedObjectMeta
+	Cluster                string
+	SuperuserSecretRef     corev1.LocalObjectReference
+	ServerImage            string
+	ServerVersion          string
+	JmxInitContainerImage  *images.Image
+	Size                   int32
+	Resources              *corev1.ResourceRequirements
+	SystemReplication      SystemReplication
+	StorageConfig          *cassdcapi.StorageConfig
+	Racks                  []cassdcapi.Rack
+	CassandraConfig        api.CassandraConfig
+	AdditionalSeeds        []string
+	Networking             *cassdcapi.NetworkingConfig
+	Users                  []cassdcapi.CassandraUser
+	PodTemplateSpec        *corev1.PodTemplateSpec
+	MgmtAPIHeap            *resource.Quantity
+	ServerEncryptionStores *encryption.EncryptionStores
+	ClientEncryptionStores *encryption.EncryptionStores
 }
 
 const (
@@ -263,6 +266,10 @@ func Coalesce(clusterName string, clusterTemplate *api.CassandraClusterTemplate,
 	} else {
 		dcConfig.MgmtAPIHeap = dcTemplate.MgmtAPIHeap
 	}
+
+	// Client/Server Encryption stores are only defined at the cluster level
+	dcConfig.ServerEncryptionStores = clusterTemplate.ServerEncryptionStores
+	dcConfig.ClientEncryptionStores = clusterTemplate.ClientEncryptionStores
 
 	return dcConfig
 }
