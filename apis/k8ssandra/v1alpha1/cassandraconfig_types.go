@@ -33,6 +33,7 @@ type CassandraConfig struct {
 
 // CassandraYaml defines the contents of the cassandra.yaml file. For more info see:
 // https://cassandra.apache.org/doc/latest/cassandra/configuration/cass_yaml_file.html
+// This structure is exposed to the users in the CRD and used in cass-operator's json mapping
 type CassandraYamlBase struct {
 	// Exists in 3.11, 4.0, trunk
 	// +optional
@@ -841,10 +842,6 @@ type CassandraYamlBase struct {
 
 	// Exists in 3.11, 4.0, trunk
 	// +optional
-	ServerEncryptionOptions *ServerEncryptionOptions `json:"server_encryption_options,omitempty"`
-
-	// Exists in 3.11, 4.0, trunk
-	// +optional
 	SlowQueryLogTimeoutInMs *int `json:"slow_query_log_timeout_in_ms,omitempty"`
 
 	// Exists in 3.11, 4.0, trunk
@@ -977,6 +974,8 @@ type CassandraYamlBase struct {
 	WriteRequestTimeoutInMs *int `json:"write_request_timeout_in_ms,omitempty"`
 }
 
+// Cassandra config structure exposed to users in the CRD
+// Augments the base config with the encryption settings, minus the encryption stores which are set separately.
 type CassandraYaml struct {
 	CassandraYamlBase `json:",inline"`
 
@@ -989,16 +988,108 @@ type CassandraYaml struct {
 	ServerEncryptionOptions *ServerEncryptionOptions `json:"server_encryption_options,omitempty"`
 }
 
+// Mapping structure for cass-operator's json config
 type CassandraJsonMapper struct {
-	CassandraYaml `json:",inline"`
+	CassandraYamlBase `json:",inline"`
 
 	// Exists in 3.11, 4.0, trunk
 	// +optional
-	ClientEncryptionOptions *ClientEncryptionOptionsYaml `json:"client_encryption_options,omitempty"`
+	ClientEncryptionOptions *ClientEncryptionOptionsJson `json:"client_encryption_options,omitempty"`
 
 	// Exists in 3.11, 4.0, trunk
 	// +optional
-	ServerEncryptionOptions *ServerEncryptionOptionsYaml `json:"server_encryption_options,omitempty"`
+	ServerEncryptionOptions *ServerEncryptionOptionsJson `json:"server_encryption_options,omitempty"`
+}
+
+// Base client encryption options exposed in the CRD
+type ClientEncryptionOptions struct {
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// +optional
+	Optional bool `json:"optional,omitempty"`
+
+	// +optional
+	Protocol string `json:"protocol,omitempty"`
+
+	// +optional
+	AcceptedProtocols []string `json:"accepted_protocols,omitempty"`
+
+	// +optional
+	Algorithm string `json:"algorithm,omitempty"`
+
+	// +optional
+	StoreType string `json:"store_type,omitempty"`
+
+	// +optional
+	CipherSuites []string `json:"cipher_suites,omitempty"`
+
+	// default: false
+	// +optional
+	RequireClientAuth bool `json:"require_client_auth,omitempty"`
+}
+
+// Augments the base client encryption options with the keystore/truststore settings.
+// Used to map client encryption options in cass-operator's Cassandra config json
+type ClientEncryptionOptionsJson struct {
+	ClientEncryptionOptions `json:",inline"`
+
+	EncryptionStoreConfig `json:",inline"`
+}
+
+// Base server encryption options exposed in the CRD
+type ServerEncryptionOptions struct {
+	// +optional
+	Optional *bool `json:"optional,omitempty"`
+
+	// +optional
+	Protocol string `json:"protocol,omitempty"`
+
+	// +optional
+	AcceptedProtocols []string `json:"accepted_protocols,omitempty"`
+
+	// +optional
+	Algorithm string `json:"algorithm,omitempty"`
+
+	// +optional
+	StoreType string `json:"store_type,omitempty"`
+
+	// +optional
+	CipherSuites []string `json:"cipher_suites,omitempty"`
+
+	// default: false
+	// +optional
+	RequireClientAuth bool `json:"require_client_auth,omitempty"`
+
+	// default: none
+	// +optional
+	InternodeEncryption string `json:"internode_encryption,omitempty"`
+
+	// default: false
+	// +optional
+	RequireEndpointVerification bool `json:"require_endpoint_verification,omitempty"`
+
+	// +optional
+	EnableLegacySslStoragePort bool `json:"enable_legacy_ssl_storage_port,omitempty"`
+}
+
+// Augments the base server encryption options with the keystore/truststore settings
+// Used to map server encryption options in cass-operator's Cassandra config json
+type ServerEncryptionOptionsJson struct {
+	ServerEncryptionOptions `json:",inline"`
+
+	EncryptionStoreConfig `json:",inline"`
+}
+
+// Encryption stores config for cass-operator's Cassandra config json mapping
+type EncryptionStoreConfig struct {
+	Keystore string `json:"keystore,omitempty"`
+
+	KeystorePassword string `json:"keystore_password,omitempty"`
+
+	Truststore string `json:"truststore,omitempty"`
+
+	TruststorePassword string `json:"truststore_password,omitempty"`
 }
 
 type JvmOptions struct {
@@ -1068,90 +1159,4 @@ type TrackWarnings struct {
 	CoordinatorReadSize *int `json:"coordinator_read_size,omitempty"`
 	LocalReadSize       *int `json:"local_read_size,omitempty"`
 	RowIndexSize        *int `json:"row_index_size,omitempty"`
-}
-
-type ClientEncryptionOptions struct {
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// +optional
-	Optional bool `json:"optional,omitempty"`
-
-	// +optional
-	Protocol string `json:"protocol,omitempty"`
-
-	// +optional
-	AcceptedProtocols []string `json:"accepted_protocols,omitempty"`
-
-	// +optional
-	Algorithm string `json:"algorithm,omitempty"`
-
-	// +optional
-	StoreType string `json:"store_type,omitempty"`
-
-	// +optional
-	CipherSuites []string `json:"cipher_suites,omitempty"`
-
-	// default: false
-	// +optional
-	RequireClientAuth bool `json:"require_client_auth,omitempty"`
-}
-
-type ClientEncryptionOptionsYaml struct {
-	ClientEncryptionOptions `json:",inline"`
-
-	EncryptionStoreConfig `json:",inline"`
-}
-
-type ServerEncryptionOptions struct {
-	Enabled *bool `json:"enabled,omitempty"`
-
-	// +optional
-	Optional *bool `json:"optional,omitempty"`
-
-	// +optional
-	Protocol *string `json:"protocol,omitempty"`
-
-	// +optional
-	AcceptedProtocols *[]string `json:"accepted_protocols,omitempty"`
-
-	// +optional
-	Algorithm *string `json:"algorithm,omitempty"`
-
-	// +optional
-	StoreType *string `json:"store_type,omitempty"`
-
-	// +optional
-	CipherSuites *[]string `json:"cipher_suites,omitempty"`
-
-	// default: false
-	// +optional
-	RequireClientAuth *bool `json:"require_client_auth,omitempty"`
-
-	// default: none
-	// +optional
-	InternodeEncryption *string `json:"internode_encryption,omitempty"`
-
-	// default: false
-	// +optional
-	RequireEndpointVerification *bool `json:"require_endpoint_verification,omitempty"`
-
-	// +optional
-	EnableLegacySslStoragePort *bool `json:"enable_legacy_ssl_storage_port,omitempty"`
-}
-
-type ServerEncryptionOptionsYaml struct {
-	ServerEncryptionOptions `json:",inline"`
-
-	EncryptionStoreConfig `json:",inline"`
-}
-
-type EncryptionStoreConfig struct {
-	Keystore *string `json:"keystore,omitempty"`
-
-	KeystorePassword *string `json:"keystore_password,omitempty"`
-
-	Truststore *string `json:"truststore,omitempty"`
-
-	TruststorePassword *string `json:"truststore_password,omitempty"`
 }

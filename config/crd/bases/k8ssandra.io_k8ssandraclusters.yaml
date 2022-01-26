@@ -132,6 +132,9 @@ spec:
                       for 4.x.
                     properties:
                       cassandraYaml:
+                        description: Cassandra config structure exposed to users in
+                          the CRD Augments the base config with the encryption settings,
+                          minus the encryption stores which are set separately.
                         properties:
                           allocate_tokens_for_keyspace:
                             description: Exists in 3.11, 4.0, trunk
@@ -965,24 +968,16 @@ spec:
                             description: Exists in 3.11, 4.0, trunk
                             properties:
                               accepted_protocols:
-                                allOf:
-                                - items:
-                                    type: string
-                                - items:
-                                    type: string
+                                items:
+                                  type: string
                                 type: array
                               algorithm:
                                 type: string
                               cipher_suites:
-                                allOf:
-                                - items:
-                                    type: string
-                                - items:
-                                    type: string
+                                items:
+                                  type: string
                                 type: array
                               enable_legacy_ssl_storage_port:
-                                type: boolean
-                              enabled:
                                 type: boolean
                               internode_encryption:
                                 description: 'default: none'
@@ -1166,6 +1161,10 @@ spec:
                             or jvm-server-options for 4.x.
                           properties:
                             cassandraYaml:
+                              description: Cassandra config structure exposed to users
+                                in the CRD Augments the base config with the encryption
+                                settings, minus the encryption stores which are set
+                                separately.
                               properties:
                                 allocate_tokens_for_keyspace:
                                   description: Exists in 3.11, 4.0, trunk
@@ -1999,24 +1998,16 @@ spec:
                                   description: Exists in 3.11, 4.0, trunk
                                   properties:
                                     accepted_protocols:
-                                      allOf:
-                                      - items:
-                                          type: string
-                                      - items:
-                                          type: string
+                                      items:
+                                        type: string
                                       type: array
                                     algorithm:
                                       type: string
                                     cipher_suites:
-                                      allOf:
-                                      - items:
-                                          type: string
-                                      - items:
-                                          type: string
+                                      items:
+                                        type: string
                                       type: array
                                     enable_legacy_ssl_storage_port:
-                                      type: boolean
-                                    enabled:
                                       type: boolean
                                     internode_encryption:
                                       description: 'default: none'

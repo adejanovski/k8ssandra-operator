@@ -107,8 +107,8 @@ func newConfig(apiConfig api.CassandraConfig, cassandraVersion string, encryptio
 
 func addEncryptionOptions(apiConfig *api.CassandraConfig, encryptionStoresSecrets EncryptionStoresPasswords, cassandraVersion string) api.CassandraJsonMapper {
 	var updatedConfig api.CassandraJsonMapper
-	updatedConfig.CassandraYaml = apiConfig.CassandraYaml
-	if updatedConfig.ClientEncryptionOptions == nil && updatedConfig.ServerEncryptionOptions == nil {
+	updatedConfig.CassandraYamlBase = apiConfig.CassandraYaml.CassandraYamlBase
+	if apiConfig.CassandraYaml.ClientEncryptionOptions == nil && apiConfig.CassandraYaml.ServerEncryptionOptions == nil {
 		return updatedConfig
 	}
 
@@ -116,25 +116,53 @@ func addEncryptionOptions(apiConfig *api.CassandraConfig, encryptionStoresSecret
 		if apiConfig.CassandraYaml.ClientEncryptionOptions.Enabled {
 			keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("client", "keystore"), "keystore")
 			truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("client", "truststore"), "truststore")
-			updatedConfig.ClientEncryptionOptions.Keystore = &keystorePath
-			updatedConfig.ClientEncryptionOptions.Truststore = &truststorePath
-			updatedConfig.ClientEncryptionOptions.KeystorePassword = &encryptionStoresSecrets.ClientKeystorePassword
-			updatedConfig.ClientEncryptionOptions.TruststorePassword = &encryptionStoresSecrets.ClientTruststorePassword
+			updatedConfig.ClientEncryptionOptions = &api.ClientEncryptionOptionsJson{
+				ClientEncryptionOptions: api.ClientEncryptionOptions{
+					AcceptedProtocols: apiConfig.CassandraYaml.ClientEncryptionOptions.AcceptedProtocols,
+					Algorithm:         apiConfig.CassandraYaml.ClientEncryptionOptions.Algorithm,
+					CipherSuites:      apiConfig.CassandraYaml.ClientEncryptionOptions.CipherSuites,
+					Enabled:           apiConfig.CassandraYaml.ClientEncryptionOptions.Enabled,
+					Optional:          apiConfig.CassandraYaml.ClientEncryptionOptions.Optional,
+					Protocol:          apiConfig.CassandraYaml.ClientEncryptionOptions.Protocol,
+					RequireClientAuth: apiConfig.CassandraYaml.ClientEncryptionOptions.RequireClientAuth,
+					StoreType:         apiConfig.CassandraYaml.ClientEncryptionOptions.StoreType,
+				},
+				EncryptionStoreConfig: api.EncryptionStoreConfig{
+					Keystore:           keystorePath,
+					Truststore:         truststorePath,
+					KeystorePassword:   encryptionStoresSecrets.ClientKeystorePassword,
+					TruststorePassword: encryptionStoresSecrets.ClientTruststorePassword,
+				},
+			}
 		}
 	}
 	if apiConfig.CassandraYaml.ServerEncryptionOptions != nil {
-		if *apiConfig.CassandraYaml.ServerEncryptionOptions.Enabled {
-			keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "keystore"), "keystore")
-			truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "truststore"), "truststore")
-			updatedConfig.ServerEncryptionOptions.Keystore = &keystorePath
-			updatedConfig.ServerEncryptionOptions.Truststore = &truststorePath
-			updatedConfig.ServerEncryptionOptions.KeystorePassword = &encryptionStoresSecrets.ServerKeystorePassword
-			updatedConfig.ServerEncryptionOptions.TruststorePassword = &encryptionStoresSecrets.ServerTruststorePassword
+		keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "keystore"), "keystore")
+		truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "truststore"), "truststore")
+		updatedConfig.ServerEncryptionOptions = &api.ServerEncryptionOptionsJson{
+			ServerEncryptionOptions: api.ServerEncryptionOptions{
+				AcceptedProtocols:           apiConfig.CassandraYaml.ServerEncryptionOptions.AcceptedProtocols,
+				Algorithm:                   apiConfig.CassandraYaml.ServerEncryptionOptions.Algorithm,
+				CipherSuites:                apiConfig.CassandraYaml.ServerEncryptionOptions.CipherSuites,
+				Optional:                    apiConfig.CassandraYaml.ServerEncryptionOptions.Optional,
+				Protocol:                    apiConfig.CassandraYaml.ServerEncryptionOptions.Protocol,
+				RequireClientAuth:           apiConfig.CassandraYaml.ServerEncryptionOptions.RequireClientAuth,
+				StoreType:                   apiConfig.CassandraYaml.ServerEncryptionOptions.StoreType,
+				EnableLegacySslStoragePort:  apiConfig.CassandraYaml.ServerEncryptionOptions.EnableLegacySslStoragePort,
+				InternodeEncryption:         apiConfig.CassandraYaml.ServerEncryptionOptions.InternodeEncryption,
+				RequireEndpointVerification: apiConfig.CassandraYaml.ServerEncryptionOptions.RequireEndpointVerification,
+			},
+			EncryptionStoreConfig: api.EncryptionStoreConfig{
+				Keystore:           keystorePath,
+				Truststore:         truststorePath,
+				KeystorePassword:   encryptionStoresSecrets.ClientKeystorePassword,
+				TruststorePassword: encryptionStoresSecrets.ClientTruststorePassword,
+			},
 		}
-		// The encryption stores shouldn't end up in the cassandra yaml, they are specific to k8ssandra
+
 		if IsCassandra3(cassandraVersion) {
 			// Remove properties that don't exist in Cassandra 3.x
-			updatedConfig.CassandraYaml.ServerEncryptionOptions.Enabled = nil
+			updatedConfig.ServerEncryptionOptions.Optional = nil
 		}
 	}
 	return updatedConfig
@@ -143,43 +171,43 @@ func addEncryptionOptions(apiConfig *api.CassandraConfig, encryptionStoresSecret
 // Some settings in Cassandra are using a float type, which isn't supported for CRDs.
 // They were changed to use a string type, and we validate here that if set they can parse correctly to float.
 func validateConfig(config *api.CassandraJsonMapper) error {
-	if config.CassandraYaml.CommitlogSyncBatchWindowInMs != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.CommitlogSyncBatchWindowInMs, 64); err != nil {
+	if config.CommitlogSyncBatchWindowInMs != nil {
+		if _, err := strconv.ParseFloat(*config.CommitlogSyncBatchWindowInMs, 64); err != nil {
 			return fmt.Errorf("CommitlogSyncBatchWindowInMs must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.DiskOptimizationEstimatePercentile != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.DiskOptimizationEstimatePercentile, 64); err != nil {
+	if config.DiskOptimizationEstimatePercentile != nil {
+		if _, err := strconv.ParseFloat(*config.DiskOptimizationEstimatePercentile, 64); err != nil {
 			return fmt.Errorf("DiskOptimizationEstimatePercentile must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.DynamicSnitchBadnessThreshold != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.DynamicSnitchBadnessThreshold, 64); err != nil {
+	if config.DynamicSnitchBadnessThreshold != nil {
+		if _, err := strconv.ParseFloat(*config.DynamicSnitchBadnessThreshold, 64); err != nil {
 			return fmt.Errorf("DynamicSnitchBadnessThreshold must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.MemtableCleanupThreshold != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.MemtableCleanupThreshold, 64); err != nil {
+	if config.MemtableCleanupThreshold != nil {
+		if _, err := strconv.ParseFloat(*config.MemtableCleanupThreshold, 64); err != nil {
 			return fmt.Errorf("MemtableCleanupThreshold must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.PhiConvictThreshold != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.PhiConvictThreshold, 64); err != nil {
+	if config.PhiConvictThreshold != nil {
+		if _, err := strconv.ParseFloat(*config.PhiConvictThreshold, 64); err != nil {
 			return fmt.Errorf("PhiConvictThreshold must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.RangeTombstoneListGrowthFactor != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.RangeTombstoneListGrowthFactor, 64); err != nil {
+	if config.RangeTombstoneListGrowthFactor != nil {
+		if _, err := strconv.ParseFloat(*config.RangeTombstoneListGrowthFactor, 64); err != nil {
 			return fmt.Errorf("RangeTombstoneListGrowthFactor must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.CommitlogSyncPeriodInMs != nil && config.CassandraYaml.CommitlogSyncBatchWindowInMs != nil {
+	if config.CommitlogSyncPeriodInMs != nil && config.CommitlogSyncBatchWindowInMs != nil {
 		return fmt.Errorf("CommitlogSyncPeriodInMs and CommitlogSyncBatchWindowInMs are mutually exclusive")
 	}
 	return nil

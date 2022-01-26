@@ -154,7 +154,7 @@ func ClientEncryptionEnabled(template *DatacenterConfig) bool {
 }
 
 func ServerEncryptionEnabled(template *DatacenterConfig) bool {
-	return template.CassandraConfig.CassandraYaml.ServerEncryptionOptions != nil && template.CassandraConfig.CassandraYaml.ServerEncryptionOptions.Enabled != nil && *template.CassandraConfig.CassandraYaml.ServerEncryptionOptions.Enabled
+	return template.CassandraConfig.CassandraYaml.ServerEncryptionOptions != nil && template.CassandraConfig.CassandraYaml.ServerEncryptionOptions.InternodeEncryption != "none"
 }
 
 type EncryptionStoresPasswords struct {
