@@ -324,8 +324,10 @@ func applyClusterTemplateConfigs(t *testing.T, ctx context.Context, f *framework
 				},
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						ConcurrentReads:  pointer.Int(8),
-						ConcurrentWrites: pointer.Int(16),
+						CassandraYamlBase: api.CassandraYamlBase{
+							ConcurrentReads:  pointer.Int(8),
+							ConcurrentWrites: pointer.Int(16),
+						},
 					},
 					JvmOptions: api.JvmOptions{
 						HeapSize: parseResource("1024Mi"),
@@ -468,8 +470,10 @@ func applyDatacenterTemplateConfigs(t *testing.T, ctx context.Context, f *framew
 						},
 						CassandraConfig: &api.CassandraConfig{
 							CassandraYaml: api.CassandraYaml{
-								ConcurrentReads:  pointer.Int(4),
-								ConcurrentWrites: pointer.Int(4),
+								CassandraYamlBase: api.CassandraYamlBase{
+									ConcurrentReads:  pointer.Int(4),
+									ConcurrentWrites: pointer.Int(4),
+								},
 							},
 							JvmOptions: api.JvmOptions{
 								HeapSize: parseResource("1024Mi"),
@@ -499,8 +503,10 @@ func applyDatacenterTemplateConfigs(t *testing.T, ctx context.Context, f *framew
 						},
 						CassandraConfig: &api.CassandraConfig{
 							CassandraYaml: api.CassandraYaml{
-								ConcurrentReads:  pointer.Int(4),
-								ConcurrentWrites: pointer.Int(12),
+								CassandraYamlBase: api.CassandraYamlBase{
+									ConcurrentReads:  pointer.Int(4),
+									ConcurrentWrites: pointer.Int(12),
+								},
 							},
 							JvmOptions: api.JvmOptions{
 								HeapSize: parseResource("2048Mi"),
@@ -616,8 +622,10 @@ func applyClusterTemplateAndDatacenterTemplateConfigs(t *testing.T, ctx context.
 				},
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						ConcurrentReads:  pointer.Int(4),
-						ConcurrentWrites: pointer.Int(4),
+						CassandraYamlBase: api.CassandraYamlBase{
+							ConcurrentReads:  pointer.Int(4),
+							ConcurrentWrites: pointer.Int(4),
+						},
 					},
 					JvmOptions: api.JvmOptions{
 						HeapSize: parseResource("1024Mi"),
@@ -653,8 +661,10 @@ func applyClusterTemplateAndDatacenterTemplateConfigs(t *testing.T, ctx context.
 						},
 						CassandraConfig: &api.CassandraConfig{
 							CassandraYaml: api.CassandraYaml{
-								ConcurrentReads:  pointer.Int(4),
-								ConcurrentWrites: pointer.Int(12),
+								CassandraYamlBase: api.CassandraYamlBase{
+									ConcurrentReads:  pointer.Int(4),
+									ConcurrentWrites: pointer.Int(12),
+								},
 							},
 							JvmOptions: api.JvmOptions{
 								HeapSize: parseResource("2048Mi"),
@@ -1212,7 +1222,9 @@ func changeNumTokensValue(t *testing.T, ctx context.Context, f *framework.Framew
 			Cassandra: &api.CassandraClusterTemplate{
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						NumTokens: pointer.Int(16),
+						CassandraYamlBase: api.CassandraYamlBase{
+							NumTokens: pointer.Int(16),
+						},
 					},
 				},
 				Datacenters: []api.CassandraDatacenterTemplate{

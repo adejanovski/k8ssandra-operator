@@ -33,7 +33,7 @@ type CassandraConfig struct {
 
 // CassandraYaml defines the contents of the cassandra.yaml file. For more info see:
 // https://cassandra.apache.org/doc/latest/cassandra/configuration/cass_yaml_file.html
-type CassandraYaml struct {
+type CassandraYamlBase struct {
 	// Exists in 3.11, 4.0, trunk
 	// +optional
 	AllocateTokensForKeyspace *string `json:"allocate_tokens_for_keyspace,omitempty"`
@@ -155,10 +155,6 @@ type CassandraYaml struct {
 	// Exists in 3.11, 4.0, trunk
 	// +optional
 	CheckForDuplicateRowsDuringReads *bool `json:"check_for_duplicate_rows_during_reads,omitempty"`
-
-	// Exists in 3.11, 4.0, trunk
-	// +optional
-	ClientEncryptionOptions *ClientEncryptionOptions `json:"client_encryption_options,omitempty"`
 
 	// Exists in trunk
 	// +optional
@@ -981,6 +977,30 @@ type CassandraYaml struct {
 	WriteRequestTimeoutInMs *int `json:"write_request_timeout_in_ms,omitempty"`
 }
 
+type CassandraYaml struct {
+	CassandraYamlBase `json:",inline"`
+
+	// Exists in 3.11, 4.0, trunk
+	// +optional
+	ClientEncryptionOptions *ClientEncryptionOptions `json:"client_encryption_options,omitempty"`
+
+	// Exists in 3.11, 4.0, trunk
+	// +optional
+	ServerEncryptionOptions *ServerEncryptionOptions `json:"server_encryption_options,omitempty"`
+}
+
+type CassandraJsonMapper struct {
+	CassandraYaml `json:",inline"`
+
+	// Exists in 3.11, 4.0, trunk
+	// +optional
+	ClientEncryptionOptions *ClientEncryptionOptionsYaml `json:"client_encryption_options,omitempty"`
+
+	// Exists in 3.11, 4.0, trunk
+	// +optional
+	ServerEncryptionOptions *ServerEncryptionOptionsYaml `json:"server_encryption_options,omitempty"`
+}
+
 type JvmOptions struct {
 	// +optional
 	HeapSize *resource.Quantity `json:"heapSize,omitempty"`
@@ -1051,49 +1071,36 @@ type TrackWarnings struct {
 }
 
 type ClientEncryptionOptions struct {
-	Enabled bool `json:"enabled"`
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
 
 	// +optional
-	Optional *bool `json:"optional,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	Keystore *string `json:"keystore,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	KeystorePassword *string `json:"keystore_password,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	Truststore *string `json:"truststore,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	TruststorePassword *string `json:"truststore_password,omitempty"`
+	Optional bool `json:"optional,omitempty"`
 
 	// +optional
-	Protocol *string `json:"protocol,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
 
 	// +optional
-	AcceptedProtocols *[]string `json:"accepted_protocols,omitempty"`
+	AcceptedProtocols []string `json:"accepted_protocols,omitempty"`
 
 	// +optional
-	Algorithm *string `json:"algorithm,omitempty"`
+	Algorithm string `json:"algorithm,omitempty"`
 
 	// +optional
-	StoreType *string `json:"store_type,omitempty"`
+	StoreType string `json:"store_type,omitempty"`
 
 	// +optional
-	CipherSuites *[]string `json:"cipher_suites,omitempty"`
+	CipherSuites []string `json:"cipher_suites,omitempty"`
 
 	// default: false
 	// +optional
-	RequireClientAuth *bool `json:"require_client_auth,omitempty"`
+	RequireClientAuth bool `json:"require_client_auth,omitempty"`
+}
+
+type ClientEncryptionOptionsYaml struct {
+	ClientEncryptionOptions `json:",inline"`
+
+	EncryptionStoreConfig `json:",inline"`
 }
 
 type ServerEncryptionOptions struct {
@@ -1101,26 +1108,6 @@ type ServerEncryptionOptions struct {
 
 	// +optional
 	Optional *bool `json:"optional,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	Keystore *string `json:"keystore,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	KeystorePassword *string `json:"keystore_password,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	Truststore *string `json:"truststore,omitempty"`
-
-	// Should not be set explicitly in the custom resource.
-	// The operator will generate the right value based on the EncryptionStores field.
-	// +optional
-	TruststorePassword *string `json:"truststore_password,omitempty"`
 
 	// +optional
 	Protocol *string `json:"protocol,omitempty"`
@@ -1151,4 +1138,20 @@ type ServerEncryptionOptions struct {
 
 	// +optional
 	EnableLegacySslStoragePort *bool `json:"enable_legacy_ssl_storage_port,omitempty"`
+}
+
+type ServerEncryptionOptionsYaml struct {
+	ServerEncryptionOptions `json:",inline"`
+
+	EncryptionStoreConfig `json:",inline"`
+}
+
+type EncryptionStoreConfig struct {
+	Keystore *string `json:"keystore,omitempty"`
+
+	KeystorePassword *string `json:"keystore_password,omitempty"`
+
+	Truststore *string `json:"truststore,omitempty"`
+
+	TruststorePassword *string `json:"truststore_password,omitempty"`
 }
