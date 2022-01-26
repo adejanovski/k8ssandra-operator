@@ -20,7 +20,7 @@ const (
 // config is an internal type that is intended to be marshaled into JSON that is a valid
 // value for CassandraDatacenter.Spec.Config.
 type config struct {
-	api.CassandraYaml
+	cassandraYaml        api.CassandraJsonMapper
 	cassandraVersion     string
 	jvmOptions           jvmOptions
 	additionalJvmOptions []string
@@ -47,15 +47,15 @@ func (c config) MarshalJSON() ([]byte, error) {
 
 	// Even though we default to Cassandra's stock defaults for num_tokens, we need to
 	// explicitly set it because the config builder defaults to num_tokens: 1
-	if c.CassandraYaml.NumTokens == nil {
+	if c.cassandraYaml.NumTokens == nil {
 		if isCassandra4(c.cassandraVersion) {
-			c.CassandraYaml.NumTokens = pointer.Int(16)
+			c.cassandraYaml.NumTokens = pointer.Int(16)
 		} else {
-			c.CassandraYaml.NumTokens = pointer.Int(256)
+			c.cassandraYaml.NumTokens = pointer.Int(256)
 		}
 	}
 
-	config["cassandra-yaml"] = c.CassandraYaml
+	config["cassandra-yaml"] = c.cassandraYaml
 
 	if c.jvmOptions.InitialHeapSize != nil || c.jvmOptions.MaxHeapSize != nil || c.jvmOptions.HeapNewGenSize != nil {
 		if isCassandra4(c.cassandraVersion) {
@@ -79,104 +79,135 @@ func (c config) MarshalJSON() ([]byte, error) {
 
 func newConfig(apiConfig api.CassandraConfig, cassandraVersion string, encryptionStoresSecrets EncryptionStoresPasswords) (config, error) {
 	// Filters out config element which do not exist in the Cassandra version in use
-	filteredConfig := addEncryptionOptions(&apiConfig, encryptionStoresSecrets, cassandraVersion)
-	filterConfigForVersion(cassandraVersion, &filteredConfig)
-	cfg := config{CassandraYaml: filteredConfig.CassandraYaml, cassandraVersion: cassandraVersion}
-	err := validateConfig(&filteredConfig)
+	filteredCassandraConfig := addEncryptionOptions(&apiConfig, encryptionStoresSecrets, cassandraVersion)
+	filterConfigForVersion(cassandraVersion, &filteredCassandraConfig)
+	cfg := config{cassandraYaml: filteredCassandraConfig, cassandraVersion: cassandraVersion}
+	err := validateConfig(&filteredCassandraConfig)
 	if err != nil {
 		return cfg, err
 	}
 
-	if filteredConfig.JvmOptions.HeapSize != nil {
-		heapSize := filteredConfig.JvmOptions.HeapSize.Value()
+	cfg.cassandraYaml = filteredCassandraConfig
+
+	if apiConfig.JvmOptions.HeapSize != nil {
+		heapSize := apiConfig.JvmOptions.HeapSize.Value()
 		cfg.jvmOptions.InitialHeapSize = &heapSize
 		cfg.jvmOptions.MaxHeapSize = &heapSize
 	}
 
-	if filteredConfig.JvmOptions.HeapNewGenSize != nil {
-		newGenSize := filteredConfig.JvmOptions.HeapNewGenSize.Value()
+	if apiConfig.JvmOptions.HeapNewGenSize != nil {
+		newGenSize := apiConfig.JvmOptions.HeapNewGenSize.Value()
 		cfg.jvmOptions.HeapNewGenSize = &newGenSize
 	}
 
-	cfg.additionalJvmOptions = filteredConfig.JvmOptions.AdditionalOptions
+	cfg.additionalJvmOptions = apiConfig.JvmOptions.AdditionalOptions
 
 	return cfg, nil
 }
 
-func addEncryptionOptions(apiConfig *api.CassandraConfig, encryptionStoresSecrets EncryptionStoresPasswords, cassandraVersion string) api.CassandraConfig {
-	updatedConfig := apiConfig.DeepCopy()
-	if updatedConfig.CassandraYaml.ClientEncryptionOptions == nil && updatedConfig.CassandraYaml.ServerEncryptionOptions == nil {
-		return *updatedConfig
+func addEncryptionOptions(apiConfig *api.CassandraConfig, encryptionStoresSecrets EncryptionStoresPasswords, cassandraVersion string) api.CassandraJsonMapper {
+	var updatedConfig api.CassandraJsonMapper
+	updatedConfig.CassandraYamlBase = apiConfig.CassandraYaml.CassandraYamlBase
+	if apiConfig.CassandraYaml.ClientEncryptionOptions == nil && apiConfig.CassandraYaml.ServerEncryptionOptions == nil {
+		return updatedConfig
 	}
 
-	if updatedConfig.CassandraYaml.ClientEncryptionOptions != nil {
-		if updatedConfig.CassandraYaml.ClientEncryptionOptions.Enabled {
+	if apiConfig.CassandraYaml.ClientEncryptionOptions != nil {
+		if apiConfig.CassandraYaml.ClientEncryptionOptions.Enabled {
 			keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("client", "keystore"), "keystore")
 			truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("client", "truststore"), "truststore")
-			updatedConfig.CassandraYaml.ClientEncryptionOptions.Keystore = pointer.String(keystorePath)
-			updatedConfig.CassandraYaml.ClientEncryptionOptions.Truststore = pointer.String(truststorePath)
-			updatedConfig.CassandraYaml.ClientEncryptionOptions.KeystorePassword = &encryptionStoresSecrets.ClientKeystorePassword
-			updatedConfig.CassandraYaml.ClientEncryptionOptions.TruststorePassword = &encryptionStoresSecrets.ClientTruststorePassword
+			updatedConfig.ClientEncryptionOptions = &api.ClientEncryptionOptionsJson{
+				ClientEncryptionOptions: api.ClientEncryptionOptions{
+					AcceptedProtocols: apiConfig.CassandraYaml.ClientEncryptionOptions.AcceptedProtocols,
+					Algorithm:         apiConfig.CassandraYaml.ClientEncryptionOptions.Algorithm,
+					CipherSuites:      apiConfig.CassandraYaml.ClientEncryptionOptions.CipherSuites,
+					Enabled:           apiConfig.CassandraYaml.ClientEncryptionOptions.Enabled,
+					Optional:          apiConfig.CassandraYaml.ClientEncryptionOptions.Optional,
+					Protocol:          apiConfig.CassandraYaml.ClientEncryptionOptions.Protocol,
+					RequireClientAuth: apiConfig.CassandraYaml.ClientEncryptionOptions.RequireClientAuth,
+					StoreType:         apiConfig.CassandraYaml.ClientEncryptionOptions.StoreType,
+				},
+				EncryptionStoreConfig: api.EncryptionStoreConfig{
+					Keystore:           keystorePath,
+					Truststore:         truststorePath,
+					KeystorePassword:   encryptionStoresSecrets.ClientKeystorePassword,
+					TruststorePassword: encryptionStoresSecrets.ClientTruststorePassword,
+				},
+			}
 		}
 	}
-	if updatedConfig.CassandraYaml.ServerEncryptionOptions != nil {
-		if *updatedConfig.CassandraYaml.ServerEncryptionOptions.Enabled {
-			keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "keystore"), "keystore")
-			truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "truststore"), "truststore")
-			updatedConfig.CassandraYaml.ServerEncryptionOptions.Keystore = pointer.String(keystorePath)
-			updatedConfig.CassandraYaml.ServerEncryptionOptions.Truststore = pointer.String(truststorePath)
-			updatedConfig.CassandraYaml.ServerEncryptionOptions.KeystorePassword = &encryptionStoresSecrets.ServerKeystorePassword
-			updatedConfig.CassandraYaml.ServerEncryptionOptions.TruststorePassword = &encryptionStoresSecrets.ServerTruststorePassword
+	if apiConfig.CassandraYaml.ServerEncryptionOptions != nil {
+		keystorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "keystore"), "keystore")
+		truststorePath := fmt.Sprintf("%s/%s", StoreMountFullPath("server", "truststore"), "truststore")
+		updatedConfig.ServerEncryptionOptions = &api.ServerEncryptionOptionsJson{
+			ServerEncryptionOptions: api.ServerEncryptionOptions{
+				AcceptedProtocols:           apiConfig.CassandraYaml.ServerEncryptionOptions.AcceptedProtocols,
+				Algorithm:                   apiConfig.CassandraYaml.ServerEncryptionOptions.Algorithm,
+				CipherSuites:                apiConfig.CassandraYaml.ServerEncryptionOptions.CipherSuites,
+				Optional:                    apiConfig.CassandraYaml.ServerEncryptionOptions.Optional,
+				Protocol:                    apiConfig.CassandraYaml.ServerEncryptionOptions.Protocol,
+				RequireClientAuth:           apiConfig.CassandraYaml.ServerEncryptionOptions.RequireClientAuth,
+				StoreType:                   apiConfig.CassandraYaml.ServerEncryptionOptions.StoreType,
+				EnableLegacySslStoragePort:  apiConfig.CassandraYaml.ServerEncryptionOptions.EnableLegacySslStoragePort,
+				InternodeEncryption:         apiConfig.CassandraYaml.ServerEncryptionOptions.InternodeEncryption,
+				RequireEndpointVerification: apiConfig.CassandraYaml.ServerEncryptionOptions.RequireEndpointVerification,
+			},
+			EncryptionStoreConfig: api.EncryptionStoreConfig{
+				Keystore:           keystorePath,
+				Truststore:         truststorePath,
+				KeystorePassword:   encryptionStoresSecrets.ClientKeystorePassword,
+				TruststorePassword: encryptionStoresSecrets.ClientTruststorePassword,
+			},
 		}
-		// The encryption stores shouldn't end up in the cassandra yaml, they are specific to k8ssandra
+
 		if IsCassandra3(cassandraVersion) {
 			// Remove properties that don't exist in Cassandra 3.x
-			updatedConfig.CassandraYaml.ServerEncryptionOptions.Enabled = nil
+			updatedConfig.ServerEncryptionOptions.Optional = nil
 		}
 	}
-	return *updatedConfig
+	return updatedConfig
 }
 
 // Some settings in Cassandra are using a float type, which isn't supported for CRDs.
 // They were changed to use a string type, and we validate here that if set they can parse correctly to float.
-func validateConfig(config *api.CassandraConfig) error {
-	if config.CassandraYaml.CommitlogSyncBatchWindowInMs != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.CommitlogSyncBatchWindowInMs, 64); err != nil {
+func validateConfig(config *api.CassandraJsonMapper) error {
+	if config.CommitlogSyncBatchWindowInMs != nil {
+		if _, err := strconv.ParseFloat(*config.CommitlogSyncBatchWindowInMs, 64); err != nil {
 			return fmt.Errorf("CommitlogSyncBatchWindowInMs must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.DiskOptimizationEstimatePercentile != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.DiskOptimizationEstimatePercentile, 64); err != nil {
+	if config.DiskOptimizationEstimatePercentile != nil {
+		if _, err := strconv.ParseFloat(*config.DiskOptimizationEstimatePercentile, 64); err != nil {
 			return fmt.Errorf("DiskOptimizationEstimatePercentile must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.DynamicSnitchBadnessThreshold != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.DynamicSnitchBadnessThreshold, 64); err != nil {
+	if config.DynamicSnitchBadnessThreshold != nil {
+		if _, err := strconv.ParseFloat(*config.DynamicSnitchBadnessThreshold, 64); err != nil {
 			return fmt.Errorf("DynamicSnitchBadnessThreshold must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.MemtableCleanupThreshold != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.MemtableCleanupThreshold, 64); err != nil {
+	if config.MemtableCleanupThreshold != nil {
+		if _, err := strconv.ParseFloat(*config.MemtableCleanupThreshold, 64); err != nil {
 			return fmt.Errorf("MemtableCleanupThreshold must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.PhiConvictThreshold != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.PhiConvictThreshold, 64); err != nil {
+	if config.PhiConvictThreshold != nil {
+		if _, err := strconv.ParseFloat(*config.PhiConvictThreshold, 64); err != nil {
 			return fmt.Errorf("PhiConvictThreshold must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.RangeTombstoneListGrowthFactor != nil {
-		if _, err := strconv.ParseFloat(*config.CassandraYaml.RangeTombstoneListGrowthFactor, 64); err != nil {
+	if config.RangeTombstoneListGrowthFactor != nil {
+		if _, err := strconv.ParseFloat(*config.RangeTombstoneListGrowthFactor, 64); err != nil {
 			return fmt.Errorf("RangeTombstoneListGrowthFactor must be a valid float: %v", err)
 		}
 	}
 
-	if config.CassandraYaml.CommitlogSyncPeriodInMs != nil && config.CassandraYaml.CommitlogSyncBatchWindowInMs != nil {
+	if config.CommitlogSyncPeriodInMs != nil && config.CommitlogSyncBatchWindowInMs != nil {
 		return fmt.Errorf("CommitlogSyncPeriodInMs and CommitlogSyncBatchWindowInMs are mutually exclusive")
 	}
 	return nil
@@ -184,130 +215,130 @@ func validateConfig(config *api.CassandraConfig) error {
 
 // Filters out config element which do not exist in the Cassandra version in use
 // Generated using the filter columns in the first sheet of https://docs.google.com/spreadsheets/d/1P0bw5avkppBnoLXY00qVQmntgx6UJQbUidZtHfCRp_c/edit?usp=sharing
-func filterConfigForVersion(cassandraVersion string, filteredConfig *api.CassandraConfig) {
+func filterConfigForVersion(cassandraVersion string, filteredConfig *api.CassandraJsonMapper) {
 	if IsCassandra3(cassandraVersion) {
-		filteredConfig.CassandraYaml.AllocateTokensForLocalReplicationFactor = nil
-		filteredConfig.CassandraYaml.AuditLoggingOptions = nil
-		filteredConfig.CassandraYaml.AuthReadConsistencyLevel = nil
-		filteredConfig.CassandraYaml.AuthWriteConsistencyLevel = nil
-		filteredConfig.CassandraYaml.AutoHintsCleanupEnabled = nil
-		filteredConfig.CassandraYaml.AutoOptimiseFullRepairStreams = nil
-		filteredConfig.CassandraYaml.AutoOptimiseIncRepairStreams = nil
-		filteredConfig.CassandraYaml.AutoOptimisePreviewRepairStreams = nil
-		filteredConfig.CassandraYaml.AutocompactionOnStartupEnabled = nil
-		filteredConfig.CassandraYaml.AutomaticSstableUpgrade = nil
-		filteredConfig.CassandraYaml.AvailableProcessors = nil
-		filteredConfig.CassandraYaml.BlockForPeersInRemoteDcs = nil
-		filteredConfig.CassandraYaml.BlockForPeersTimeoutInSecs = nil
-		filteredConfig.CassandraYaml.ClientErrorReportingExclusions = nil
-		filteredConfig.CassandraYaml.CommitlogSyncGroupWindowInMs = nil
-		filteredConfig.CassandraYaml.CompactionTombstoneWarningThreshold = nil
-		filteredConfig.CassandraYaml.ConcurrentMaterializedViewBuilders = nil
-		filteredConfig.CassandraYaml.ConcurrentValidations = nil
-		filteredConfig.CassandraYaml.ConsecutiveMessageErrorsThreshold = nil
-		filteredConfig.CassandraYaml.CorruptedTombstoneStrategy = nil
-		filteredConfig.CassandraYaml.DefaultKeyspaceRf = nil
-		filteredConfig.CassandraYaml.DenylistConsistencyLevel = nil
-		filteredConfig.CassandraYaml.DenylistInitialLoadRetrySeconds = nil
-		filteredConfig.CassandraYaml.DenylistMaxKeysPerTable = nil
-		filteredConfig.CassandraYaml.DenylistMaxKeysTotal = nil
-		filteredConfig.CassandraYaml.DenylistRefreshSeconds = nil
-		filteredConfig.CassandraYaml.DiagnosticEventsEnabled = nil
-		filteredConfig.CassandraYaml.EnableDenylistRangeReads = nil
-		filteredConfig.CassandraYaml.EnableDenylistReads = nil
-		filteredConfig.CassandraYaml.EnableDenylistWrites = nil
-		filteredConfig.CassandraYaml.EnablePartitionDenylist = nil
-		filteredConfig.CassandraYaml.EnableTransientReplication = nil
-		filteredConfig.CassandraYaml.FailureDetector = nil
-		filteredConfig.CassandraYaml.FileCacheEnabled = nil
-		filteredConfig.CassandraYaml.FlushCompression = nil
-		filteredConfig.CassandraYaml.FullQueryLoggingOptions = nil
-		filteredConfig.CassandraYaml.HintWindowPersistentEnabled = nil
-		filteredConfig.CassandraYaml.IdealConsistencyLevel = nil
-		filteredConfig.CassandraYaml.InitialRangeTombstoneListAllocationSize = nil
-		filteredConfig.CassandraYaml.InternodeApplicationReceiveQueueCapacityInBytes = nil
-		filteredConfig.CassandraYaml.InternodeApplicationReceiveQueueReserveEndpointCapacityInBytes = nil
-		filteredConfig.CassandraYaml.InternodeApplicationReceiveQueueReserveGlobalCapacityInBytes = nil
-		filteredConfig.CassandraYaml.InternodeApplicationSendQueueCapacityInBytes = nil
-		filteredConfig.CassandraYaml.InternodeApplicationSendQueueReserveEndpointCapacityInBytes = nil
-		filteredConfig.CassandraYaml.InternodeApplicationSendQueueReserveGlobalCapacityInBytes = nil
-		filteredConfig.CassandraYaml.InternodeErrorReportingExclusions = nil
-		filteredConfig.CassandraYaml.InternodeMaxMessageSizeInBytes = nil
-		filteredConfig.CassandraYaml.InternodeSocketReceiveBufferSizeInBytes = nil
-		filteredConfig.CassandraYaml.InternodeSocketSendBufferSizeInBytes = nil
-		filteredConfig.CassandraYaml.InternodeStreamingTcpUserTimeoutInMs = nil
-		filteredConfig.CassandraYaml.InternodeTcpConnectTimeoutInMs = nil
-		filteredConfig.CassandraYaml.InternodeTcpUserTimeoutInMs = nil
-		filteredConfig.CassandraYaml.KeyCacheMigrateDuringCompaction = nil
-		filteredConfig.CassandraYaml.KeyspaceCountWarnThreshold = nil
-		filteredConfig.CassandraYaml.MaxConcurrentAutomaticSstableUpgrades = nil
-		filteredConfig.CassandraYaml.MinimumKeyspaceRf = nil
-		filteredConfig.CassandraYaml.NativeTransportAllowOlderProtocols = nil
-		filteredConfig.CassandraYaml.NativeTransportIdleTimeoutInMs = nil
-		filteredConfig.CassandraYaml.NativeTransportMaxRequestsPerSecond = nil
-		filteredConfig.CassandraYaml.NativeTransportRateLimitingEnabled = nil
-		filteredConfig.CassandraYaml.NativeTransportReceiveQueueCapacityInBytes = nil
-		filteredConfig.CassandraYaml.NetworkAuthorizer = nil
-		filteredConfig.CassandraYaml.NetworkingCacheSizeInMb = nil
-		filteredConfig.CassandraYaml.PaxosCacheSizeInMb = nil
-		filteredConfig.CassandraYaml.PeriodicCommitlogSyncLagBlockInMs = nil
-		filteredConfig.CassandraYaml.RangeTombstoneListGrowthFactor = nil
-		filteredConfig.CassandraYaml.RejectRepairCompactionThreshold = nil
-		filteredConfig.CassandraYaml.RepairCommandPoolFullStrategy = nil
-		filteredConfig.CassandraYaml.RepairCommandPoolSize = nil
-		filteredConfig.CassandraYaml.RepairSessionSpaceInMb = nil
-		filteredConfig.CassandraYaml.RepairedDataTrackingForPartitionReadsEnabled = nil
-		filteredConfig.CassandraYaml.RepairedDataTrackingForRangeReadsEnabled = nil
-		filteredConfig.CassandraYaml.ReportUnconfirmedRepairedDataMismatches = nil
-		filteredConfig.CassandraYaml.SnapshotLinksPerSecond = nil
-		filteredConfig.CassandraYaml.SnapshotOnRepairedDataMismatch = nil
-		filteredConfig.CassandraYaml.StreamEntireSstables = nil
-		filteredConfig.CassandraYaml.StreamingConnectionsPerHost = nil
-		filteredConfig.CassandraYaml.TableCountWarnThreshold = nil
-		filteredConfig.CassandraYaml.TrackWarnings = nil
-		filteredConfig.CassandraYaml.TraverseAuthFromRoot = nil
-		filteredConfig.CassandraYaml.UseDeterministicTableId = nil
-		filteredConfig.CassandraYaml.UseOffheapMerkleTrees = nil
-		filteredConfig.CassandraYaml.ValidationPreviewPurgeHeadStartInSec = nil
+		filteredConfig.AllocateTokensForLocalReplicationFactor = nil
+		filteredConfig.AuditLoggingOptions = nil
+		filteredConfig.AuthReadConsistencyLevel = nil
+		filteredConfig.AuthWriteConsistencyLevel = nil
+		filteredConfig.AutoHintsCleanupEnabled = nil
+		filteredConfig.AutoOptimiseFullRepairStreams = nil
+		filteredConfig.AutoOptimiseIncRepairStreams = nil
+		filteredConfig.AutoOptimisePreviewRepairStreams = nil
+		filteredConfig.AutocompactionOnStartupEnabled = nil
+		filteredConfig.AutomaticSstableUpgrade = nil
+		filteredConfig.AvailableProcessors = nil
+		filteredConfig.BlockForPeersInRemoteDcs = nil
+		filteredConfig.BlockForPeersTimeoutInSecs = nil
+		filteredConfig.ClientErrorReportingExclusions = nil
+		filteredConfig.CommitlogSyncGroupWindowInMs = nil
+		filteredConfig.CompactionTombstoneWarningThreshold = nil
+		filteredConfig.ConcurrentMaterializedViewBuilders = nil
+		filteredConfig.ConcurrentValidations = nil
+		filteredConfig.ConsecutiveMessageErrorsThreshold = nil
+		filteredConfig.CorruptedTombstoneStrategy = nil
+		filteredConfig.DefaultKeyspaceRf = nil
+		filteredConfig.DenylistConsistencyLevel = nil
+		filteredConfig.DenylistInitialLoadRetrySeconds = nil
+		filteredConfig.DenylistMaxKeysPerTable = nil
+		filteredConfig.DenylistMaxKeysTotal = nil
+		filteredConfig.DenylistRefreshSeconds = nil
+		filteredConfig.DiagnosticEventsEnabled = nil
+		filteredConfig.EnableDenylistRangeReads = nil
+		filteredConfig.EnableDenylistReads = nil
+		filteredConfig.EnableDenylistWrites = nil
+		filteredConfig.EnablePartitionDenylist = nil
+		filteredConfig.EnableTransientReplication = nil
+		filteredConfig.FailureDetector = nil
+		filteredConfig.FileCacheEnabled = nil
+		filteredConfig.FlushCompression = nil
+		filteredConfig.FullQueryLoggingOptions = nil
+		filteredConfig.HintWindowPersistentEnabled = nil
+		filteredConfig.IdealConsistencyLevel = nil
+		filteredConfig.InitialRangeTombstoneListAllocationSize = nil
+		filteredConfig.InternodeApplicationReceiveQueueCapacityInBytes = nil
+		filteredConfig.InternodeApplicationReceiveQueueReserveEndpointCapacityInBytes = nil
+		filteredConfig.InternodeApplicationReceiveQueueReserveGlobalCapacityInBytes = nil
+		filteredConfig.InternodeApplicationSendQueueCapacityInBytes = nil
+		filteredConfig.InternodeApplicationSendQueueReserveEndpointCapacityInBytes = nil
+		filteredConfig.InternodeApplicationSendQueueReserveGlobalCapacityInBytes = nil
+		filteredConfig.InternodeErrorReportingExclusions = nil
+		filteredConfig.InternodeMaxMessageSizeInBytes = nil
+		filteredConfig.InternodeSocketReceiveBufferSizeInBytes = nil
+		filteredConfig.InternodeSocketSendBufferSizeInBytes = nil
+		filteredConfig.InternodeStreamingTcpUserTimeoutInMs = nil
+		filteredConfig.InternodeTcpConnectTimeoutInMs = nil
+		filteredConfig.InternodeTcpUserTimeoutInMs = nil
+		filteredConfig.KeyCacheMigrateDuringCompaction = nil
+		filteredConfig.KeyspaceCountWarnThreshold = nil
+		filteredConfig.MaxConcurrentAutomaticSstableUpgrades = nil
+		filteredConfig.MinimumKeyspaceRf = nil
+		filteredConfig.NativeTransportAllowOlderProtocols = nil
+		filteredConfig.NativeTransportIdleTimeoutInMs = nil
+		filteredConfig.NativeTransportMaxRequestsPerSecond = nil
+		filteredConfig.NativeTransportRateLimitingEnabled = nil
+		filteredConfig.NativeTransportReceiveQueueCapacityInBytes = nil
+		filteredConfig.NetworkAuthorizer = nil
+		filteredConfig.NetworkingCacheSizeInMb = nil
+		filteredConfig.PaxosCacheSizeInMb = nil
+		filteredConfig.PeriodicCommitlogSyncLagBlockInMs = nil
+		filteredConfig.RangeTombstoneListGrowthFactor = nil
+		filteredConfig.RejectRepairCompactionThreshold = nil
+		filteredConfig.RepairCommandPoolFullStrategy = nil
+		filteredConfig.RepairCommandPoolSize = nil
+		filteredConfig.RepairSessionSpaceInMb = nil
+		filteredConfig.RepairedDataTrackingForPartitionReadsEnabled = nil
+		filteredConfig.RepairedDataTrackingForRangeReadsEnabled = nil
+		filteredConfig.ReportUnconfirmedRepairedDataMismatches = nil
+		filteredConfig.SnapshotLinksPerSecond = nil
+		filteredConfig.SnapshotOnRepairedDataMismatch = nil
+		filteredConfig.StreamEntireSstables = nil
+		filteredConfig.StreamingConnectionsPerHost = nil
+		filteredConfig.TableCountWarnThreshold = nil
+		filteredConfig.TrackWarnings = nil
+		filteredConfig.TraverseAuthFromRoot = nil
+		filteredConfig.UseDeterministicTableId = nil
+		filteredConfig.UseOffheapMerkleTrees = nil
+		filteredConfig.ValidationPreviewPurgeHeadStartInSec = nil
 	}
 	if isCassandra4(cassandraVersion) {
-		filteredConfig.CassandraYaml.AuthReadConsistencyLevel = nil
-		filteredConfig.CassandraYaml.AuthWriteConsistencyLevel = nil
-		filteredConfig.CassandraYaml.AutoHintsCleanupEnabled = nil
-		filteredConfig.CassandraYaml.AvailableProcessors = nil
-		filteredConfig.CassandraYaml.ClientErrorReportingExclusions = nil
-		filteredConfig.CassandraYaml.CompactionTombstoneWarningThreshold = nil
-		filteredConfig.CassandraYaml.DefaultKeyspaceRf = nil
-		filteredConfig.CassandraYaml.DenylistConsistencyLevel = nil
-		filteredConfig.CassandraYaml.DenylistInitialLoadRetrySeconds = nil
-		filteredConfig.CassandraYaml.DenylistMaxKeysPerTable = nil
-		filteredConfig.CassandraYaml.DenylistMaxKeysTotal = nil
-		filteredConfig.CassandraYaml.DenylistRefreshSeconds = nil
-		filteredConfig.CassandraYaml.EnableDenylistRangeReads = nil
-		filteredConfig.CassandraYaml.EnableDenylistReads = nil
-		filteredConfig.CassandraYaml.EnableDenylistWrites = nil
-		filteredConfig.CassandraYaml.EnablePartitionDenylist = nil
-		filteredConfig.CassandraYaml.FailureDetector = nil
-		filteredConfig.CassandraYaml.HintWindowPersistentEnabled = nil
-		filteredConfig.CassandraYaml.IndexInterval = nil
-		filteredConfig.CassandraYaml.InternodeErrorReportingExclusions = nil
-		filteredConfig.CassandraYaml.InternodeRecvBuffSizeInBytes = nil
-		filteredConfig.CassandraYaml.InternodeSendBuffSizeInBytes = nil
-		filteredConfig.CassandraYaml.MinimumKeyspaceRf = nil
-		filteredConfig.CassandraYaml.NativeTransportMaxRequestsPerSecond = nil
-		filteredConfig.CassandraYaml.NativeTransportRateLimitingEnabled = nil
-		filteredConfig.CassandraYaml.OtcBacklogExpirationIntervalMs = nil
-		filteredConfig.CassandraYaml.PaxosCacheSizeInMb = nil
-		filteredConfig.CassandraYaml.RequestScheduler = nil
-		filteredConfig.CassandraYaml.RequestSchedulerId = nil
-		filteredConfig.CassandraYaml.RequestSchedulerOptions = nil
-		filteredConfig.CassandraYaml.StreamingSocketTimeoutInMs = nil
-		filteredConfig.CassandraYaml.ThriftFramedTransportSizeInMb = nil
-		filteredConfig.CassandraYaml.ThriftMaxMessageLengthInMb = nil
-		filteredConfig.CassandraYaml.ThriftPreparedStatementsCacheSizeMb = nil
-		filteredConfig.CassandraYaml.TrackWarnings = nil
-		filteredConfig.CassandraYaml.TraverseAuthFromRoot = nil
-		filteredConfig.CassandraYaml.UseDeterministicTableId = nil
+		filteredConfig.AuthReadConsistencyLevel = nil
+		filteredConfig.AuthWriteConsistencyLevel = nil
+		filteredConfig.AutoHintsCleanupEnabled = nil
+		filteredConfig.AvailableProcessors = nil
+		filteredConfig.ClientErrorReportingExclusions = nil
+		filteredConfig.CompactionTombstoneWarningThreshold = nil
+		filteredConfig.DefaultKeyspaceRf = nil
+		filteredConfig.DenylistConsistencyLevel = nil
+		filteredConfig.DenylistInitialLoadRetrySeconds = nil
+		filteredConfig.DenylistMaxKeysPerTable = nil
+		filteredConfig.DenylistMaxKeysTotal = nil
+		filteredConfig.DenylistRefreshSeconds = nil
+		filteredConfig.EnableDenylistRangeReads = nil
+		filteredConfig.EnableDenylistReads = nil
+		filteredConfig.EnableDenylistWrites = nil
+		filteredConfig.EnablePartitionDenylist = nil
+		filteredConfig.FailureDetector = nil
+		filteredConfig.HintWindowPersistentEnabled = nil
+		filteredConfig.IndexInterval = nil
+		filteredConfig.InternodeErrorReportingExclusions = nil
+		filteredConfig.InternodeRecvBuffSizeInBytes = nil
+		filteredConfig.InternodeSendBuffSizeInBytes = nil
+		filteredConfig.MinimumKeyspaceRf = nil
+		filteredConfig.NativeTransportMaxRequestsPerSecond = nil
+		filteredConfig.NativeTransportRateLimitingEnabled = nil
+		filteredConfig.OtcBacklogExpirationIntervalMs = nil
+		filteredConfig.PaxosCacheSizeInMb = nil
+		filteredConfig.RequestScheduler = nil
+		filteredConfig.RequestSchedulerId = nil
+		filteredConfig.RequestSchedulerOptions = nil
+		filteredConfig.StreamingSocketTimeoutInMs = nil
+		filteredConfig.ThriftFramedTransportSizeInMb = nil
+		filteredConfig.ThriftMaxMessageLengthInMb = nil
+		filteredConfig.ThriftPreparedStatementsCacheSizeMb = nil
+		filteredConfig.TrackWarnings = nil
+		filteredConfig.TraverseAuthFromRoot = nil
+		filteredConfig.UseDeterministicTableId = nil
 	}
 }
 

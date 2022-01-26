@@ -1,10 +1,11 @@
 package cassandra
 
 import (
+	"testing"
+
 	k8ssandraapi "github.com/k8ssandra/k8ssandra-operator/apis/k8ssandra/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/utils/pointer"
-	"testing"
 )
 
 func TestApplyAuthSettings(t *testing.T) {
@@ -20,9 +21,11 @@ func TestApplyAuthSettings(t *testing.T) {
 			k8ssandraapi.CassandraConfig{},
 			k8ssandraapi.CassandraConfig{
 				CassandraYaml: k8ssandraapi.CassandraYaml{
-					Authenticator: pointer.String("PasswordAuthenticator"),
-					Authorizer:    pointer.String("CassandraAuthorizer"),
-					RoleManager:   pointer.String("CassandraRoleManager"),
+					CassandraYamlBase: k8ssandraapi.CassandraYamlBase{
+						Authenticator: pointer.String("PasswordAuthenticator"),
+						Authorizer:    pointer.String("CassandraAuthorizer"),
+						RoleManager:   pointer.String("CassandraRoleManager"),
+					},
 				},
 			},
 		},
@@ -31,16 +34,20 @@ func TestApplyAuthSettings(t *testing.T) {
 			true,
 			k8ssandraapi.CassandraConfig{
 				CassandraYaml: k8ssandraapi.CassandraYaml{
-					Authenticator: pointer.String("MyAuthenticator"),
-					Authorizer:    pointer.String("MyAuthorizer"),
-					RoleManager:   pointer.String("MyRoleManager"),
+					CassandraYamlBase: k8ssandraapi.CassandraYamlBase{
+						Authenticator: pointer.String("MyAuthenticator"),
+						Authorizer:    pointer.String("MyAuthorizer"),
+						RoleManager:   pointer.String("MyRoleManager"),
+					},
 				},
 			},
 			k8ssandraapi.CassandraConfig{
 				CassandraYaml: k8ssandraapi.CassandraYaml{
-					Authenticator: pointer.String("MyAuthenticator"),
-					Authorizer:    pointer.String("MyAuthorizer"),
-					RoleManager:   pointer.String("MyRoleManager"),
+					CassandraYamlBase: k8ssandraapi.CassandraYamlBase{
+						Authenticator: pointer.String("MyAuthenticator"),
+						Authorizer:    pointer.String("MyAuthorizer"),
+						RoleManager:   pointer.String("MyRoleManager"),
+					},
 				},
 			},
 		},
@@ -50,9 +57,11 @@ func TestApplyAuthSettings(t *testing.T) {
 			k8ssandraapi.CassandraConfig{},
 			k8ssandraapi.CassandraConfig{
 				CassandraYaml: k8ssandraapi.CassandraYaml{
-					Authenticator: pointer.String("AllowAllAuthenticator"),
-					Authorizer:    pointer.String("AllowAllAuthorizer"),
-					RoleManager:   pointer.String("CassandraRoleManager"),
+					CassandraYamlBase: k8ssandraapi.CassandraYamlBase{
+						Authenticator: pointer.String("AllowAllAuthenticator"),
+						Authorizer:    pointer.String("AllowAllAuthorizer"),
+						RoleManager:   pointer.String("CassandraRoleManager"),
+					},
 				},
 			},
 		},
@@ -61,16 +70,20 @@ func TestApplyAuthSettings(t *testing.T) {
 			false,
 			k8ssandraapi.CassandraConfig{
 				CassandraYaml: k8ssandraapi.CassandraYaml{
-					Authenticator: pointer.String("MyAuthenticator"),
-					Authorizer:    pointer.String("MyAuthorizer"),
-					RoleManager:   pointer.String("MyRoleManager"),
+					CassandraYamlBase: k8ssandraapi.CassandraYamlBase{
+						Authenticator: pointer.String("MyAuthenticator"),
+						Authorizer:    pointer.String("MyAuthorizer"),
+						RoleManager:   pointer.String("MyRoleManager"),
+					},
 				},
 			},
 			k8ssandraapi.CassandraConfig{
 				CassandraYaml: k8ssandraapi.CassandraYaml{
-					Authenticator: pointer.String("MyAuthenticator"),
-					Authorizer:    pointer.String("MyAuthorizer"),
-					RoleManager:   pointer.String("MyRoleManager"),
+					CassandraYamlBase: k8ssandraapi.CassandraYamlBase{
+						Authenticator: pointer.String("MyAuthenticator"),
+						Authorizer:    pointer.String("MyAuthorizer"),
+						RoleManager:   pointer.String("MyRoleManager"),
+					},
 				},
 			},
 		},

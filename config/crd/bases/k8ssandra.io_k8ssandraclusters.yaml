@@ -132,8 +132,9 @@ spec:
                       for 4.x.
                     properties:
                       cassandraYaml:
-                        description: 'CassandraYaml defines the contents of the cassandra.yaml
-                          file. For more info see: https://cassandra.apache.org/doc/latest/cassandra/configuration/cass_yaml_file.html'
+                        description: Cassandra config structure exposed to users in
+                          the CRD Augments the base config with the encryption settings,
+                          minus the encryption stores which are set separately.
                         properties:
                           allocate_tokens_for_keyspace:
                             description: Exists in 3.11, 4.0, trunk
@@ -315,16 +316,6 @@ spec:
                                 type: array
                               enabled:
                                 type: boolean
-                              keystore:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
-                                type: string
-                              keystore_password:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
-                                type: string
                               optional:
                                 type: boolean
                               protocol:
@@ -334,18 +325,6 @@ spec:
                                 type: boolean
                               store_type:
                                 type: string
-                              truststore:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
-                                type: string
-                              truststore_password:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
-                                type: string
-                            required:
-                            - enabled
                             type: object
                           client_error_reporting_exclusions:
                             description: Exists in trunk
@@ -1000,20 +979,8 @@ spec:
                                 type: array
                               enable_legacy_ssl_storage_port:
                                 type: boolean
-                              enabled:
-                                type: boolean
                               internode_encryption:
                                 description: 'default: none'
-                                type: string
-                              keystore:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
-                                type: string
-                              keystore_password:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
                                 type: string
                               optional:
                                 type: boolean
@@ -1026,16 +993,6 @@ spec:
                                 description: 'default: false'
                                 type: boolean
                               store_type:
-                                type: string
-                              truststore:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
-                                type: string
-                              truststore_password:
-                                description: Should not be set explicitly in the custom
-                                  resource. The operator will generate the right value
-                                  based on the EncryptionStores field.
                                 type: string
                             type: object
                           slow_query_log_timeout_in_ms:
@@ -1204,8 +1161,10 @@ spec:
                             or jvm-server-options for 4.x.
                           properties:
                             cassandraYaml:
-                              description: 'CassandraYaml defines the contents of
-                                the cassandra.yaml file. For more info see: https://cassandra.apache.org/doc/latest/cassandra/configuration/cass_yaml_file.html'
+                              description: Cassandra config structure exposed to users
+                                in the CRD Augments the base config with the encryption
+                                settings, minus the encryption stores which are set
+                                separately.
                               properties:
                                 allocate_tokens_for_keyspace:
                                   description: Exists in 3.11, 4.0, trunk
@@ -1387,18 +1346,6 @@ spec:
                                       type: array
                                     enabled:
                                       type: boolean
-                                    keystore:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
-                                      type: string
-                                    keystore_password:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
-                                      type: string
                                     optional:
                                       type: boolean
                                     protocol:
@@ -1408,20 +1355,6 @@ spec:
                                       type: boolean
                                     store_type:
                                       type: string
-                                    truststore:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
-                                      type: string
-                                    truststore_password:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
-                                      type: string
-                                  required:
-                                  - enabled
                                   type: object
                                 client_error_reporting_exclusions:
                                   description: Exists in trunk
@@ -2076,22 +2009,8 @@ spec:
                                       type: array
                                     enable_legacy_ssl_storage_port:
                                       type: boolean
-                                    enabled:
-                                      type: boolean
                                     internode_encryption:
                                       description: 'default: none'
-                                      type: string
-                                    keystore:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
-                                      type: string
-                                    keystore_password:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
                                       type: string
                                     optional:
                                       type: boolean
@@ -2104,18 +2023,6 @@ spec:
                                       description: 'default: false'
                                       type: boolean
                                     store_type:
-                                      type: string
-                                    truststore:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
-                                      type: string
-                                    truststore_password:
-                                      description: Should not be set explicitly in
-                                        the custom resource. The operator will generate
-                                        the right value based on the EncryptionStores
-                                        field.
                                       type: string
                                   type: object
                                 slow_query_log_timeout_in_ms:

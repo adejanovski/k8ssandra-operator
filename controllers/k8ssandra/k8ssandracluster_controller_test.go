@@ -324,8 +324,10 @@ func applyClusterTemplateConfigs(t *testing.T, ctx context.Context, f *framework
 				},
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						ConcurrentReads:  pointer.Int(8),
-						ConcurrentWrites: pointer.Int(16),
+						CassandraYamlBase: api.CassandraYamlBase{
+							ConcurrentReads:  pointer.Int(8),
+							ConcurrentWrites: pointer.Int(16),
+						},
 					},
 					JvmOptions: api.JvmOptions{
 						HeapSize: parseResource("1024Mi"),
@@ -468,8 +470,10 @@ func applyDatacenterTemplateConfigs(t *testing.T, ctx context.Context, f *framew
 						},
 						CassandraConfig: &api.CassandraConfig{
 							CassandraYaml: api.CassandraYaml{
-								ConcurrentReads:  pointer.Int(4),
-								ConcurrentWrites: pointer.Int(4),
+								CassandraYamlBase: api.CassandraYamlBase{
+									ConcurrentReads:  pointer.Int(4),
+									ConcurrentWrites: pointer.Int(4),
+								},
 							},
 							JvmOptions: api.JvmOptions{
 								HeapSize: parseResource("1024Mi"),
@@ -499,8 +503,10 @@ func applyDatacenterTemplateConfigs(t *testing.T, ctx context.Context, f *framew
 						},
 						CassandraConfig: &api.CassandraConfig{
 							CassandraYaml: api.CassandraYaml{
-								ConcurrentReads:  pointer.Int(4),
-								ConcurrentWrites: pointer.Int(12),
+								CassandraYamlBase: api.CassandraYamlBase{
+									ConcurrentReads:  pointer.Int(4),
+									ConcurrentWrites: pointer.Int(12),
+								},
 							},
 							JvmOptions: api.JvmOptions{
 								HeapSize: parseResource("2048Mi"),
@@ -616,8 +622,10 @@ func applyClusterTemplateAndDatacenterTemplateConfigs(t *testing.T, ctx context.
 				},
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						ConcurrentReads:  pointer.Int(4),
-						ConcurrentWrites: pointer.Int(4),
+						CassandraYamlBase: api.CassandraYamlBase{
+							ConcurrentReads:  pointer.Int(4),
+							ConcurrentWrites: pointer.Int(4),
+						},
 					},
 					JvmOptions: api.JvmOptions{
 						HeapSize: parseResource("1024Mi"),
@@ -653,8 +661,10 @@ func applyClusterTemplateAndDatacenterTemplateConfigs(t *testing.T, ctx context.
 						},
 						CassandraConfig: &api.CassandraConfig{
 							CassandraYaml: api.CassandraYaml{
-								ConcurrentReads:  pointer.Int(4),
-								ConcurrentWrites: pointer.Int(12),
+								CassandraYamlBase: api.CassandraYamlBase{
+									ConcurrentReads:  pointer.Int(4),
+									ConcurrentWrites: pointer.Int(12),
+								},
 							},
 							JvmOptions: api.JvmOptions{
 								HeapSize: parseResource("2048Mi"),
@@ -1212,7 +1222,9 @@ func changeNumTokensValue(t *testing.T, ctx context.Context, f *framework.Framew
 			Cassandra: &api.CassandraClusterTemplate{
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						NumTokens: pointer.Int(16),
+						CassandraYamlBase: api.CassandraYamlBase{
+							NumTokens: pointer.Int(16),
+						},
 					},
 				},
 				Datacenters: []api.CassandraDatacenterTemplate{
@@ -1434,7 +1446,7 @@ func applyClusterWithEncryptionOptions(t *testing.T, ctx context.Context, f *fra
 							Enabled: true,
 						},
 						ServerEncryptionOptions: &api.ServerEncryptionOptions{
-							Enabled: pointer.Bool(true),
+							InternodeEncryption: "all",
 						},
 					},
 				},
@@ -1549,16 +1561,18 @@ func applyClusterWithEncryptionOptions(t *testing.T, ctx context.Context, f *fra
 	_, foundServerTruststore := cassandra.FindVolume(dc1.Spec.PodTemplateSpec, "server-truststore")
 	assert.True(foundServerTruststore, "failed to find server-truststore volume in dc1")
 
+	t.Logf("dc1 spec config: %+v", dc1.Spec.Config)
 	dcConfig, err := utils.UnmarshalToMap(dc1.Spec.Config)
 	require.NoError(err, "failed to unmarshal dc1 config")
 
 	cassYaml, foundYaml := dcConfig["cassandra-yaml"].(map[string]interface{})
 
+	t.Logf("cassYaml: %+v", cassYaml)
 	assert.True(foundYaml, "failed to find cassandra-yaml in dcConfig")
 
 	serverEncryptionOptions := cassYaml["server_encryption_options"].(map[string]interface{})
 
-	assert.True(serverEncryptionOptions["enabled"].(bool), "server_encryption_options is not enabled")
+	assert.Equal("all", serverEncryptionOptions["internode_encryption"].(string), "server_encryption_options is not enabled")
 
 	sgConfigMap := corev1.ConfigMap{}
 	sgConfigMapKey := framework.ClusterKey{NamespacedName: client.ObjectKey{Namespace: namespace, Name: stargate.CassandraConfigMap}, K8sContext: k8sCtx0}
@@ -1656,7 +1670,7 @@ func applyClusterWithEncryptionOptionsFail(t *testing.T, ctx context.Context, f 
 							Enabled: true,
 						},
 						ServerEncryptionOptions: &api.ServerEncryptionOptions{
-							Enabled: pointer.Bool(true),
+							InternodeEncryption: "all",
 						},
 					},
 				},

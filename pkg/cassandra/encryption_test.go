@@ -9,7 +9,6 @@ import (
 	"github.com/k8ssandra/k8ssandra-operator/pkg/utils"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/pointer"
 )
 
 func TestCheckMandatoryEncryptionFields(t *testing.T) {
@@ -20,7 +19,7 @@ func TestCheckMandatoryEncryptionFields(t *testing.T) {
 					Enabled: true,
 				},
 				ServerEncryptionOptions: &api.ServerEncryptionOptions{
-					Enabled: pointer.Bool(true),
+					InternodeEncryption: "all",
 				},
 			},
 		},
@@ -66,7 +65,7 @@ func TestAddEncryptionMountToCassandra(t *testing.T) {
 					Enabled: true,
 				},
 				ServerEncryptionOptions: &api.ServerEncryptionOptions{
-					Enabled: pointer.Bool(true),
+					InternodeEncryption: "all",
 				},
 			},
 		},
@@ -168,7 +167,7 @@ func TestAddVolumesForEncryption(t *testing.T) {
 					Enabled: true,
 				},
 				ServerEncryptionOptions: &api.ServerEncryptionOptions{
-					Enabled: pointer.Bool(true),
+					InternodeEncryption: "all",
 				},
 			},
 		},
@@ -229,7 +228,7 @@ func TestHandleEncryptionOptions(t *testing.T) {
 					Enabled: true,
 				},
 				ServerEncryptionOptions: &api.ServerEncryptionOptions{
-					Enabled: pointer.Bool(true),
+					InternodeEncryption: "all",
 				},
 			},
 		},
@@ -308,7 +307,7 @@ func TestHandleEncryptionOptionsWithExistingContainers(t *testing.T) {
 					Enabled: true,
 				},
 				ServerEncryptionOptions: &api.ServerEncryptionOptions{
-					Enabled: pointer.Bool(true),
+					InternodeEncryption: "all",
 				},
 			},
 		},
@@ -377,7 +376,7 @@ func TestHandleNoEncryptionOptions(t *testing.T) {
 					Enabled: false,
 				},
 				ServerEncryptionOptions: &api.ServerEncryptionOptions{
-					Enabled: pointer.Bool(false),
+					InternodeEncryption: "none",
 				},
 			},
 		},
@@ -405,7 +404,7 @@ func TestHandleFailedEncryptionOptions(t *testing.T) {
 					Enabled: true,
 				},
 				ServerEncryptionOptions: &api.ServerEncryptionOptions{
-					Enabled: pointer.Bool(false),
+					InternodeEncryption: "all",
 				},
 			},
 		},

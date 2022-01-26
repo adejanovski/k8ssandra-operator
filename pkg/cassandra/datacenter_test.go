@@ -174,14 +174,18 @@ func TestCoalesce(t *testing.T) {
 			clusterTemplate: &api.CassandraClusterTemplate{
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						ConcurrentReads: pointer.Int(8),
+						CassandraYamlBase: api.CassandraYamlBase{
+							ConcurrentReads: pointer.Int(8),
+						},
 					},
 				},
 			},
 			dcTemplate: &api.CassandraDatacenterTemplate{
 				CassandraConfig: &api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						ConcurrentWrites: pointer.Int(8),
+						CassandraYamlBase: api.CassandraYamlBase{
+							ConcurrentWrites: pointer.Int(8),
+						},
 					},
 					JvmOptions: api.JvmOptions{
 						HeapSize: parseResource("1024Mi"),
@@ -191,7 +195,9 @@ func TestCoalesce(t *testing.T) {
 			want: &DatacenterConfig{
 				CassandraConfig: api.CassandraConfig{
 					CassandraYaml: api.CassandraYaml{
-						ConcurrentWrites: pointer.Int(8),
+						CassandraYamlBase: api.CassandraYamlBase{
+							ConcurrentWrites: pointer.Int(8),
+						},
 					},
 					JvmOptions: api.JvmOptions{
 						HeapSize: parseResource("1024Mi"),
