@@ -43,6 +43,7 @@ func NewReaper(
 				Namespace: dc.Namespace,
 			},
 			DatacenterAvailability: computeReaperDcAvailability(kc),
+			ClientEncryptionStores: kc.Spec.Cassandra.ClientEncryptionStores,
 		},
 	}
 	if kc.Spec.IsAuthEnabled() {
