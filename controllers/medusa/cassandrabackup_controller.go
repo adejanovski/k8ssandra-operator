@@ -55,7 +55,7 @@ type CassandraBackupReconciler struct {
 
 // +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=cassandrabackups,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=cassandrabackups/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=medusa.datastax.com,namespace="k8ssandra",resources=cassandradatacenters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=cassandradatacenters,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",namespace="k8ssandra",resources=pods;services,verbs=get;list;watch
 
 func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -74,6 +74,26 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	backup := instance.DeepCopy()
+
+	cassdcKey := types.NamespacedName{Namespace: backup.Namespace, Name: backup.Spec.CassandraDatacenter}
+	cassdc := &cassdcapi.CassandraDatacenter{}
+	err = r.Get(ctx, cassdcKey, cassdc)
+	if err != nil {
+		logger.Error(err, "failed to get cassandradatacenter", "CassandraDatacenter", cassdcKey)
+		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
+	}
+
+	pods, err := r.getCassandraDatacenterPods(ctx, cassdc, logger)
+	if err != nil {
+		logger.Error(err, "Failed to get datacenter pods")
+		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
+	}
+
+	// If the CassandraBackup object was created by a sync operation, we mustn't trigger a backup.
+	if backup.Spec.CreatedBySync {
+		logger.Info("Backup created by sync, skipping reconciliation", "CassandraBackup", backup.Name)
+		return ctrl.Result{}, nil
+	}
 
 	// If there is anything in progress, simply requeue the request
 	if len(backup.Status.InProgress) > 0 {
@@ -112,20 +132,6 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	logger.Info("Backups have not been started yet")
 
-	cassdcKey := types.NamespacedName{Namespace: backup.Namespace, Name: backup.Spec.CassandraDatacenter}
-	cassdc := &cassdcapi.CassandraDatacenter{}
-	err = r.Get(ctx, cassdcKey, cassdc)
-	if err != nil {
-		logger.Error(err, "failed to get cassandradatacenter", "CassandraDatacenter", cassdcKey)
-		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
-	}
-
-	pods, err := r.getCassandraDatacenterPods(ctx, cassdc, logger)
-	if err != nil {
-		logger.Error(err, "Failed to get datacenter pods")
-		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
-	}
-
 	// Make sure that Medusa is deployed
 	if !isMedusaDeployed(pods) {
 		// TODO generate event and/or update status to indicate error condition
@@ -134,10 +140,6 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	patch := client.MergeFromWithOptions(backup.DeepCopy(), client.MergeFromWithOptimisticLock{})
-	if err = r.addCassdcSpecToStatus(ctx, backup, cassdc); err != nil {
-		logger.Error(err, "failed to patch status with CassdcTemplateSpec", "CassandraDatacenter", cassdcKey)
-		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
-	}
 
 	backup.Status.StartTime = metav1.Now()
 	for _, pod := range pods {

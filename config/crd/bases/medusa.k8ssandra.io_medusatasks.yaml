@@ -6,20 +6,20 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.7.0
   creationTimestamp: null
-  name: cassandrarestores.medusa.k8ssandra.io
+  name: medusatasks.medusa.k8ssandra.io
 spec:
   group: medusa.k8ssandra.io
   names:
-    kind: CassandraRestore
-    listKind: CassandraRestoreList
-    plural: cassandrarestores
-    singular: cassandrarestore
+    kind: MedusaTask
+    listKind: MedusaTaskList
+    plural: medusatasks
+    singular: medusatask
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: CassandraRestore is the Schema for the cassandrarestores API
+        description: MedusaTask is the Schema for the MedusaTasks API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -34,45 +34,31 @@ spec:
           metadata:
             type: object
           spec:
-            description: CassandraRestoreSpec defines the desired state of CassandraRestore
+            description: MedusaTaskSpec defines the desired state of MedusaTask
             properties:
-              backup:
-                description: The name of the CassandraBackup to restore
+              backupName:
+                description: Name of the backup. Will be necessary for operations
+                  such as verify or status.
                 type: string
               cassandraDatacenter:
-                properties:
-                  clusterName:
-                    description: The name to give the C* cluster.
-                    type: string
-                  name:
-                    description: The name to give the new, restored CassandraDatacenter
-                    type: string
-                required:
-                - clusterName
-                - name
-                type: object
-              inPlace:
-                description: When true the restore will be performed on the source
-                  cluster from which the backup was taken. There will be a rolling
-                  restart of the source cluster.
-                type: boolean
-              shutdown:
-                description: When set to true, the cluster is shutdown before the
-                  restore is applied. This is necessary process if there are schema
-                  changes between the backup and current schema. Recommended.
-                type: boolean
+                description: The name of the CassandraDatacenter to run the task on
+                type: string
+              operation:
+                description: Requested operation to perform.
+                enum:
+                - sync
+                - purge
+                - prepare_restore
+                type: string
+              restoreKey:
+                description: Restore key to use for the prepare_restore operation.
+                type: string
             required:
-            - backup
             - cassandraDatacenter
-            - inPlace
-            - shutdown
             type: object
           status:
-            description: CassandraRestoreStatus defines the observed state of CassandraRestore
+            description: MedusaTaskStatus defines the observed state of MedusaTask
             properties:
-              datacenterStopped:
-                format: date-time
-                type: string
               failed:
                 items:
                   type: string
@@ -82,22 +68,26 @@ spec:
                 type: string
               finished:
                 items:
-                  type: string
+                  properties:
+                    nbBackupsPurged:
+                      type: integer
+                    nbObjectsPurged:
+                      type: integer
+                    podName:
+                      type: string
+                    totalObjectsWithinGcGrace:
+                      type: integer
+                    totalPurgedSize:
+                      type: integer
+                  type: object
                 type: array
               inProgress:
                 items:
                   type: string
                 type: array
-              restoreKey:
-                description: A unique key that identifies the restore operation.
-                type: string
-              restorePrepared:
-                type: boolean
               startTime:
                 format: date-time
                 type: string
-            required:
-            - restoreKey
             type: object
         type: object
     served: true

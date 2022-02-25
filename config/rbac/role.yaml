@@ -155,14 +155,6 @@ rules:
   - patch
   - update
 - apiGroups:
-  - medusa.datastax.com
-  resources:
-  - cassandradatacenters
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
   - medusa.k8ssandra.io
   resources:
   - cassandrabackups
@@ -185,6 +177,14 @@ rules:
 - apiGroups:
   - medusa.k8ssandra.io
   resources:
+  - cassandradatacenters
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - medusa.k8ssandra.io
+  resources:
   - cassandrarestores
   verbs:
   - delete
@@ -197,6 +197,32 @@ rules:
   - medusa.k8ssandra.io
   resources:
   - cassandrarestores/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - medusa.k8ssandra.io
+  resources:
+  - medusatasks
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - medusa.k8ssandra.io
+  resources:
+  - medusatasks/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - medusa.k8ssandra.io
+  resources:
+  - medusatasks/status
   verbs:
   - get
   - patch

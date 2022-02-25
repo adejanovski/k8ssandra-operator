@@ -52,6 +52,8 @@ type CassandraRestoreStatus struct {
 	// A unique key that identifies the restore operation.
 	RestoreKey string `json:"restoreKey"`
 
+	RestorePrepared bool `json:"restorePrepared,omitempty"`
+
 	StartTime metav1.Time `json:"startTime,omitempty"`
 
 	FinishTime metav1.Time `json:"finishTime,omitempty"`

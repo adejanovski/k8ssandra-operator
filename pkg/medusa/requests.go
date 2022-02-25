@@ -142,6 +142,11 @@ func (r *RestoreRequest) SetRestoreFinishTime(time metav1.Time) {
 	r.Restore.Status.FinishTime = time
 }
 
+// SetRestorePrepared sets the prepared flag. Note that this function is idempotent.
+func (r *RestoreRequest) SetRestorePrepared(prepared bool) {
+	r.Restore.Status.RestorePrepared = prepared
+}
+
 // GetRestorePatch returns a patch that can be used to apply changes to the CassandraRestore.
 // The patch is created when the RestoreRequest is initialized.
 func (r *RestoreRequest) GetRestorePatch() client.Patch {

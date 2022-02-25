@@ -45,6 +45,12 @@ type CassandraBackupSpec struct {
 	// +kubebuilder:validation:Enum=differential;full;
 	// +kubebuilder:default:=differential
 	Type BackupType `json:"backupType,omitempty"`
+
+	// Specifies if the object was created by a synchronization job.
+	// If so, reconciliation will be skipped.
+	// +kubebuilder:default:=false
+	// +kubebuilder:validation:optional
+	CreatedBySync bool `json:"createdBySync,omitempty"`
 }
 
 type CassandraDatacenterTemplateSpec struct {

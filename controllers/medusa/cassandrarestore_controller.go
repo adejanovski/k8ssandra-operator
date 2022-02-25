@@ -20,9 +20,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/cassandra"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/config"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +37,7 @@ import (
 	"github.com/google/uuid"
 	cassdcapi "github.com/k8ssandra/cass-operator/apis/cassandra/v1beta1"
 	medusaapi "github.com/k8ssandra/k8ssandra-operator/apis/medusa/v1alpha1"
+	medusav1alpha1 "github.com/k8ssandra/k8ssandra-operator/apis/medusa/v1alpha1"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/medusa"
 )
 
@@ -49,6 +52,7 @@ type CassandraRestoreReconciler struct {
 	*config.ReconcilerConfig
 	client.Client
 	Scheme *runtime.Scheme
+	medusa.ClientFactory
 }
 
 // +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=cassandrarestores,verbs=get;list;watch;update;patch;delete
@@ -66,8 +70,42 @@ func (r *CassandraRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return *result, err
 	}
 
-	request.SetRestoreStartTime(metav1.Now())
-	request.SetRestoreKey(uuid.New().String())
+	if request.Restore.Status.StartTime.IsZero() {
+		request.SetRestoreStartTime(metav1.Now())
+		request.SetRestoreKey(uuid.New().String())
+		request.SetRestorePrepared(false)
+	}
+
+	cassdcKey := types.NamespacedName{Namespace: request.Restore.Namespace, Name: request.Datacenter.Name}
+	cassdc := &cassdcapi.CassandraDatacenter{}
+	err = r.Get(ctx, cassdcKey, cassdc)
+	if err != nil {
+		logger.Error(err, "failed to get cassandradatacenter", "CassandraDatacenter", cassdcKey)
+		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
+	}
+
+	// Prepare the restore by placing a mapping file in the storage backend
+	if !request.Restore.Status.RestorePrepared {
+		restorePrepared := false
+		if requeue, err := r.prepareRestore(ctx, request); err != nil {
+			logger.Error(err, "Failed to prepare restore")
+			if requeue {
+				return r.applyUpdatesAndRequeue(ctx, request)
+			} else {
+				return ctrl.Result{}, err
+			}
+		} else if requeue {
+			// Operation is still in progress
+			return r.applyUpdatesAndRequeue(ctx, request)
+		} else {
+			restorePrepared = true
+			request.SetRestorePrepared(restorePrepared)
+		}
+		if !restorePrepared {
+			logger.Error(fmt.Errorf("failed to prepare restore"), request.Restore.Status.RestoreKey)
+			return r.applyUpdatesAndRequeue(ctx, request)
+		}
+	}
 
 	if request.Restore.Spec.Shutdown && request.Restore.Status.DatacenterStopped.IsZero() {
 		if stopped := stopDatacenter(request); !stopped {
@@ -195,6 +233,62 @@ func (r *CassandraRestoreReconciler) podTemplateSpecUpdateComplete(ctx context.C
 		}
 	}
 
+	return true, nil
+}
+
+func (r *CassandraRestoreReconciler) getCassandraDatacenterPods(ctx context.Context, cassdc *cassdcapi.CassandraDatacenter, logger logr.Logger) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	labels := client.MatchingLabels{cassdcapi.DatacenterLabel: cassdc.Name}
+	if err := r.List(ctx, podList, labels); err != nil {
+		logger.Error(err, "failed to get pods for cassandradatacenter", "CassandraDatacenter", cassdc.Name)
+		return nil, err
+	}
+
+	pods := make([]corev1.Pod, 0)
+	for _, pod := range podList.Items {
+		pods = append(pods, pod)
+	}
+
+	return pods, nil
+}
+
+func (r *CassandraRestoreReconciler) prepareRestore(ctx context.Context, request *medusa.RestoreRequest) (bool, error) {
+	// Create a prepare_restore medusa task to create the mapping files in each pod.
+	// Returns true if the reconcile needs to be requeued, false otherwise.
+	prepare := &medusav1alpha1.MedusaTask{}
+	if err := r.Client.Get(context.Background(), types.NamespacedName{Name: request.Restore.Status.RestoreKey, Namespace: request.Restore.Namespace}, prepare); err != nil {
+		if errors.IsNotFound(err) {
+			// Create the sync task
+			prepare = &medusav1alpha1.MedusaTask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      request.Restore.Status.RestoreKey,
+					Namespace: request.Restore.Namespace,
+				},
+				Spec: medusav1alpha1.MedusaTaskSpec{
+					Operation:           medusav1alpha1.OperationTypePrepareRestore,
+					CassandraDatacenter: request.Restore.Spec.CassandraDatacenter.Name,
+					BackupName:          request.Backup.Spec.Name,
+					RestoreKey:          request.Restore.Status.RestoreKey,
+				},
+			}
+			if err := r.Client.Create(context.Background(), prepare); err != nil {
+				return true, err
+			}
+		} else {
+			return true, err
+		}
+	} else {
+		if !prepare.Status.FinishTime.IsZero() {
+			// Prepare is finished
+			return false, nil
+		}
+		if len(prepare.Status.InProgress) == 0 {
+			// No more pods are running the task but finish time is not set.
+			// This means the task failed.
+			return false, fmt.Errorf("prepare restore task failed for restore %s", request.Restore.Name)
+		}
+	}
+	// The operation is still in progress
 	return true, nil
 }
 

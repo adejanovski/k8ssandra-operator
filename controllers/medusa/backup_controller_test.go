@@ -3,7 +3,6 @@ package medusa
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"strconv"
 	"sync"
 	"testing"
@@ -158,26 +157,33 @@ func verifyObjectDoesNotExist(ctx context.Context, t *testing.T, f *framework.Fr
 
 func createAndVerifyBackup(dcKey framework.ClusterKey, dc *cassdcapi.CassandraDatacenter, f *framework.Framework, ctx context.Context, require *require.Assertions, t *testing.T, namespace, backupName string) bool {
 	dcServiceKey := types.NamespacedName{Namespace: dcKey.Namespace, Name: dc.GetAllPodsServiceName()}
-	dcService := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: dcServiceKey.Namespace,
-			Name:      dcServiceKey.Name,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				cassdcapi.ClusterLabel: dc.Spec.ClusterName,
-			},
-			Ports: []corev1.ServicePort{
-				{
-					Name: "cql",
-					Port: 9042,
+	dcService := &corev1.Service{}
+	if err := f.Client.Get(ctx, dcServiceKey, dcService); err != nil {
+		if errors.IsNotFound(err) {
+			dcService = &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: dcServiceKey.Namespace,
+					Name:      dcServiceKey.Name,
 				},
-			},
-		},
-	}
+				Spec: corev1.ServiceSpec{
+					Selector: map[string]string{
+						cassdcapi.ClusterLabel: dc.Spec.ClusterName,
+					},
+					Ports: []corev1.ServicePort{
+						{
+							Name: "cql",
+							Port: 9042,
+						},
+					},
+				},
+			}
 
-	err := f.Client.Create(ctx, dcService)
-	require.NoError(err)
+			err := f.Client.Create(ctx, dcService)
+			require.NoError(err)
+		} else {
+			t.Errorf("failed to get service %s: %v", dcServiceKey, err)
+		}
+	}
 
 	createDatacenterPods(t, ctx, dc, f.Client)
 
@@ -194,7 +200,7 @@ func createAndVerifyBackup(dcKey framework.ClusterKey, dc *cassdcapi.CassandraDa
 		},
 	}
 
-	err = f.Client.Create(ctx, backup)
+	err := f.Client.Create(ctx, backup)
 	require.NoError(err, "failed to create CassandraBackup")
 
 	t.Log("verify that the backups are started")
@@ -206,33 +212,6 @@ func createAndVerifyBackup(dcKey framework.ClusterKey, dc *cassdcapi.CassandraDa
 			return false
 		}
 		return !updated.Status.StartTime.IsZero()
-	}, timeout, interval)
-
-	t.Log("verify that the CassandraDatacenter spec is added to the backup status")
-	require.Eventually(func() bool {
-		updated := &api.CassandraBackup{}
-		err := f.Client.Get(context.Background(), backupKey, updated)
-		if err != nil {
-			return false
-		}
-
-		return updated.Status.CassdcTemplateSpec.Spec.ClusterName == dc.Spec.ClusterName &&
-			updated.Status.CassdcTemplateSpec.Spec.Size == dc.Spec.Size &&
-			updated.Status.CassdcTemplateSpec.Spec.ServerVersion == dc.Spec.ServerVersion &&
-			updated.Status.CassdcTemplateSpec.Spec.ServerImage == dc.Spec.ServerImage &&
-			updated.Status.CassdcTemplateSpec.Spec.ManagementApiAuth == dc.Spec.ManagementApiAuth &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.Resources, dc.Spec.Resources) &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.SystemLoggerResources, dc.Spec.SystemLoggerResources) &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.ConfigBuilderResources, dc.Spec.ConfigBuilderResources) &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.Racks, dc.Spec.Racks) &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.StorageConfig, dc.Spec.StorageConfig) &&
-			updated.Status.CassdcTemplateSpec.Spec.Stopped == dc.Spec.Stopped &&
-			updated.Status.CassdcTemplateSpec.Spec.ConfigBuilderImage == dc.Spec.ConfigBuilderImage &&
-			updated.Status.CassdcTemplateSpec.Spec.AllowMultipleNodesPerWorker == dc.Spec.AllowMultipleNodesPerWorker &&
-			updated.Status.CassdcTemplateSpec.Spec.ServiceAccount == dc.Spec.ServiceAccount &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.NodeSelector, dc.Spec.NodeSelector) &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.Users, dc.Spec.Users) &&
-			reflect.DeepEqual(updated.Status.CassdcTemplateSpec.Spec.AdditionalSeeds, dc.Spec.AdditionalSeeds)
 	}, timeout, interval)
 
 	t.Log("verify the backup finished")
@@ -326,10 +305,34 @@ func (c *fakeMedusaClient) CreateBackup(ctx context.Context, name string, backup
 }
 
 func (c *fakeMedusaClient) GetBackups(ctx context.Context) ([]*medusa.BackupSummary, error) {
-	return nil, nil
+	backups := make([]*medusa.BackupSummary, 0)
+	for _, name := range c.RequestedBackups {
+		backup := &medusa.BackupSummary{
+			BackupName: name,
+			StartTime:  0,
+			FinishTime: 10,
+			Status:     *medusa.StatusType_SUCCESS.Enum(),
+		}
+		backups = append(backups, backup)
+	}
+	return backups, nil
 }
 
 func (c *fakeMedusaClient) BackupStatus(ctx context.Context, name string) (*medusa.BackupStatusResponse, error) {
+	return nil, nil
+}
+
+func (c *fakeMedusaClient) PurgeBackups(ctx context.Context) (*medusa.PurgeBackupsResponse, error) {
+	response := &medusa.PurgeBackupsResponse{
+		NbBackupsPurged:           2,
+		NbObjectsPurged:           10,
+		TotalObjectsWithinGcGrace: 0,
+		TotalPurgedSize:           1000,
+	}
+	return response, nil
+}
+
+func (c *fakeMedusaClient) PrepareRestore(ctx context.Context, datacenter, backupName, restoreKey string) (*medusa.PrepareRestoreResponse, error) {
 	return nil, nil
 }
 
