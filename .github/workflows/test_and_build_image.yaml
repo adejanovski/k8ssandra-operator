@@ -42,6 +42,10 @@ jobs:
         run: |
           export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
           make envtest test
+      - name: Setup tmate session
+        if: "failure()"
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 10
   build_image:
     name: Build and push image to Docker Hub
     runs-on: ubuntu-latest
@@ -71,10 +75,6 @@ jobs:
         id: compute_tags
         run: |
           echo "TAGS=k8ssandra/k8ssandra-operator:${{ steps.vars.outputs.sha_short }},k8ssandra/k8ssandra-operator:latest" >> $GITHUB_ENV
-      - name: Setup tmate session
-        if: "failure()"
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 10
       - name: Compute release tags
         id: compute_release_tags
         if: startsWith(github.ref, 'refs/heads/release/')
