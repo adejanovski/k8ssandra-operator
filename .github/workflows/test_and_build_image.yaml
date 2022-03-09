@@ -41,8 +41,6 @@ jobs:
       - name: Run unit and integration tests
         run: |
           export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
-          cd config/crd
-          kustomize build
           make envtest test
   build_image:
     name: Build and push image to Docker Hub
