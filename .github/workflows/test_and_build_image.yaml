@@ -41,14 +41,9 @@ jobs:
       - name: Run unit and integration tests
         run: |
           export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
-          which kustomize
-          kustomize version
-          bin/kustomize version
+          cd config/crd
+          kustomize build
           make envtest test
-      - name: Setup tmate session
-        if: "failure()"
-        uses: mxschmitt/action-tmate@v3.11
-        timeout-minutes: 10
   build_image:
     name: Build and push image to Docker Hub
     runs-on: ubuntu-latest
