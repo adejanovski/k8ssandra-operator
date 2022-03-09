@@ -62,9 +62,10 @@ func TestOperator(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("CreateSingleDatacenterCluster", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      createSingleDatacenterCluster,
-		fixture:       "single-dc",
-		deployTraefik: true,
+		testFunc:                    createSingleDatacenterCluster,
+		fixture:                     "single-dc",
+		skipK8ssandraClusterCleanup: true,
+		deployTraefik:               true,
 	}))
 	t.Run("CreateStargateAndDatacenter", e2eTest(ctx, &e2eTestOpts{
 		testFunc:                     createStargateAndDatacenter,
@@ -74,16 +75,19 @@ func TestOperator(t *testing.T) {
 		doCassandraDatacenterCleanup: true,
 	}))
 	t.Run("CreateMultiDatacenterCluster", e2eTest(ctx, &e2eTestOpts{
-		testFunc: createMultiDatacenterCluster,
-		fixture:  "multi-dc",
+		testFunc:                    createMultiDatacenterCluster,
+		fixture:                     "multi-dc",
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("AddDcToCluster", e2eTest(ctx, &e2eTestOpts{
-		testFunc: addDcToCluster,
-		fixture:  "add-dc",
+		testFunc:                    addDcToCluster,
+		fixture:                     "add-dc",
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("RemoveDcFromCluster", e2eTest(ctx, &e2eTestOpts{
-		testFunc: removeDcFromCluster,
-		fixture:  "remove-dc",
+		testFunc:                    removeDcFromCluster,
+		fixture:                     "remove-dc",
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("CreateMultiStargateAndDatacenter", e2eTest(ctx, &e2eTestOpts{
 		testFunc:                     createStargateAndDatacenter,
@@ -93,19 +97,22 @@ func TestOperator(t *testing.T) {
 		doCassandraDatacenterCleanup: true,
 	}))
 	t.Run("CheckStargateApisWithMultiDcCluster", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      checkStargateApisWithMultiDcCluster,
-		fixture:       "multi-dc-stargate",
-		deployTraefik: true,
+		testFunc:                    checkStargateApisWithMultiDcCluster,
+		fixture:                     "multi-dc-stargate",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("CreateSingleReaper", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      createSingleReaper,
-		fixture:       "single-dc-reaper",
-		deployTraefik: true,
+		testFunc:                    createSingleReaper,
+		fixture:                     "single-dc-reaper",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("CreateMultiReaper", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      createMultiReaper,
-		fixture:       "multi-dc-reaper",
-		deployTraefik: true,
+		testFunc:                    createMultiReaper,
+		fixture:                     "multi-dc-reaper",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("CreateReaperAndDatacenter", e2eTest(ctx, &e2eTestOpts{
 		testFunc:                     createReaperAndDatacenter,
@@ -116,11 +123,12 @@ func TestOperator(t *testing.T) {
 	}))
 	t.Run("ClusterScoped", func(t *testing.T) {
 		t.Run("MultiDcMultiCluster", e2eTest(ctx, &e2eTestOpts{
-			testFunc:             multiDcMultiCluster,
-			fixture:              "multi-dc-cluster-scope",
-			clusterScoped:        true,
-			sutNamespace:         "test-0",
-			additionalNamespaces: []string{"test-1", "test-2"},
+			testFunc:                    multiDcMultiCluster,
+			fixture:                     "multi-dc-cluster-scope",
+			clusterScoped:               true,
+			sutNamespace:                "test-0",
+			additionalNamespaces:        []string{"test-1", "test-2"},
+			skipK8ssandraClusterCleanup: true,
 		}))
 	})
 	t.Run("CreateSingleMedusa", e2eTest(ctx, &e2eTestOpts{
@@ -138,37 +146,44 @@ func TestOperator(t *testing.T) {
 		doCassandraDatacenterCleanup: false,
 	}))
 	t.Run("MultiDcAuthOnOff", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      multiDcAuthOnOff,
-		fixture:       "multi-dc-auth",
-		deployTraefik: true,
+		testFunc:                    multiDcAuthOnOff,
+		fixture:                     "multi-dc-auth",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("ConfigControllerRestarts", e2eTest(ctx, &e2eTestOpts{
-		testFunc: controllerRestart,
+		testFunc:                    controllerRestart,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("SingleDcEncryptionWithStargate", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      createSingleDatacenterClusterWithEncryption,
-		fixture:       "single-dc-encryption-stargate",
-		deployTraefik: true,
+		testFunc:                    createSingleDatacenterClusterWithEncryption,
+		fixture:                     "single-dc-encryption-stargate",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("SingleDcEncryptionWithReaper", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      createSingleReaperWithEncryption,
-		fixture:       "single-dc-encryption-reaper",
-		deployTraefik: true,
+		testFunc:                    createSingleReaperWithEncryption,
+		fixture:                     "single-dc-encryption-reaper",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("MultiDcEncryptionWithStargate", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      checkStargateApisWithMultiDcEncryptedCluster,
-		fixture:       "multi-dc-encryption-stargate",
-		deployTraefik: true,
+		testFunc:                    checkStargateApisWithMultiDcEncryptedCluster,
+		fixture:                     "multi-dc-encryption-stargate",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("MultiDcEncryptionWithReaper", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      createMultiReaperWithEncryption,
-		fixture:       "multi-dc-encryption-reaper",
-		deployTraefik: true,
+		testFunc:                    createMultiReaperWithEncryption,
+		fixture:                     "multi-dc-encryption-reaper",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 	t.Run("StopAndRestartDc", e2eTest(ctx, &e2eTestOpts{
-		testFunc:      stopAndRestartDc,
-		fixture:       "stop-dc",
-		deployTraefik: true,
+		testFunc:                    stopAndRestartDc,
+		fixture:                     "stop-dc",
+		deployTraefik:               true,
+		skipK8ssandraClusterCleanup: true,
 	}))
 }
 
@@ -838,7 +853,7 @@ func addDcToCluster(t *testing.T, ctx context.Context, namespace string, f *fram
 		}
 
 		return true
-	}, 30 * time.Second, 1 * time.Second, "timed out waiting to add DC to K8ssandraCluster")
+	}, 30*time.Second, 1*time.Second, "timed out waiting to add DC to K8ssandraCluster")
 
 	dc2Key := framework.ClusterKey{K8sContext: "kind-k8ssandra-1", NamespacedName: types.NamespacedName{Namespace: namespace, Name: "dc2"}}
 	checkDatacenterReady(t, ctx, dc2Key, f)
