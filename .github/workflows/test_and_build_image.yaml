@@ -41,6 +41,7 @@ jobs:
       - name: Run unit and integration tests
         run: |
           export PATH=$GOROOT/bin:$GOPATH/bin:$PATH
+          kustomize version
           make envtest test
       - name: Setup tmate session
         if: "failure()"
