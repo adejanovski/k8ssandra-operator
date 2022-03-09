@@ -1,5 +1,5 @@
 /*
-Copyright 2021.
+Copyright 2022.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -166,7 +166,7 @@ func (r *MedusaTaskReconciler) purgeOperation(ctx context.Context, task *medusav
 	go func() {
 		wg := sync.WaitGroup{}
 
-		// Mutex to prevent concurrent updates to the backup.Status object
+		// Mutex to prevent concurrent updates to the Status object
 		backupMutex := sync.Mutex{}
 		patch := client.MergeFrom(task.DeepCopy())
 
@@ -232,7 +232,7 @@ func (r *MedusaTaskReconciler) prepareRestoreOperation(ctx context.Context, task
 	go func() {
 		wg := sync.WaitGroup{}
 
-		// Mutex to prevent concurrent updates to the backup.Status object
+		// Mutex to prevent concurrent updates to the Status object
 		backupMutex := sync.Mutex{}
 		patch := client.MergeFrom(task.DeepCopy())
 
@@ -291,7 +291,7 @@ func (r *MedusaTaskReconciler) syncOperation(ctx context.Context, task *medusav1
 						// Backup doesn't exist, create it
 						logger.Info("Creating Cassandra Backup", "Backup", backup.BackupName)
 						startTime := metav1.Unix(backup.StartTime, 0)
-						finishTime := metav1.Unix(backup.StartTime+1000, 0)
+						finishTime := metav1.Unix(backup.FinishTime, 0)
 						backupResource = &medusav1alpha1.CassandraBackup{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      backup.BackupName,
@@ -300,7 +300,7 @@ func (r *MedusaTaskReconciler) syncOperation(ctx context.Context, task *medusav1
 							Spec: medusav1alpha1.CassandraBackupSpec{
 								Name:                backup.BackupName,
 								CassandraDatacenter: task.Spec.CassandraDatacenter,
-								Type:                medusav1alpha1.BackupType("differential"),
+								Type:                medusav1alpha1.BackupType(backup.BackupType),
 								CreatedBySync:       true,
 							},
 						}

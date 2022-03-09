@@ -84,7 +84,7 @@ func (r *CassandraRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
 	}
 
-	// Prepare the restore by placing a mapping file in the storage backend
+	// Prepare the restore by placing a mapping file in the Cassandra data volume.
 	if !request.Restore.Status.RestorePrepared {
 		restorePrepared := false
 		if requeue, err := r.prepareRestore(ctx, request); err != nil {
