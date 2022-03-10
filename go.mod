@@ -7,6 +7,7 @@ require (
 	github.com/Azure/go-autorest/autorest v0.11.20 // indirect
 	github.com/Azure/go-autorest/autorest/adal v0.9.15 // indirect
 	github.com/Jeffail/gabs v1.4.0
+	github.com/avast/retry-go/v4 v4.0.0
 	github.com/aws/aws-sdk-go v1.40.37 // indirect
 	github.com/bombsimon/logrusr v1.1.0
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -30,7 +31,6 @@ require (
 	golang.org/x/crypto v0.0.0-20210616213533-5ff15b29337e // indirect
 	golang.org/x/net v0.0.0-20210903162142-ad29c8ab022f // indirect
 	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f // indirect
-	golang.org/x/sys v0.0.0-20210906170528-6f6e22806c34 // indirect
 	google.golang.org/grpc v1.39.1
 	google.golang.org/protobuf v1.27.1
 	gopkg.in/resty.v1 v1.12.0
