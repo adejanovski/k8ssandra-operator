@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/cassandra"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/config"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -234,22 +233,6 @@ func (r *CassandraRestoreReconciler) podTemplateSpecUpdateComplete(ctx context.C
 	}
 
 	return true, nil
-}
-
-func (r *CassandraRestoreReconciler) getCassandraDatacenterPods(ctx context.Context, cassdc *cassdcapi.CassandraDatacenter, logger logr.Logger) ([]corev1.Pod, error) {
-	podList := &corev1.PodList{}
-	labels := client.MatchingLabels{cassdcapi.DatacenterLabel: cassdc.Name}
-	if err := r.List(ctx, podList, labels); err != nil {
-		logger.Error(err, "failed to get pods for cassandradatacenter", "CassandraDatacenter", cassdc.Name)
-		return nil, err
-	}
-
-	pods := make([]corev1.Pod, 0)
-	for _, pod := range podList.Items {
-		pods = append(pods, pod)
-	}
-
-	return pods, nil
 }
 
 func (r *CassandraRestoreReconciler) prepareRestore(ctx context.Context, request *medusa.RestoreRequest) (bool, error) {
