@@ -21,7 +21,6 @@ func TestMedusaBackupRestore(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	testEnv1 := setupMedusaBackupTestEnv(t, ctx)
 	defer testEnv1.Stop(t)
-	defer cancel()
 
 	t.Run("TestMedusaBackupDatacenter", testEnv1.ControllerTest(ctx, testMedusaBackupDatacenter))
 
@@ -32,12 +31,18 @@ func TestMedusaBackupRestore(t *testing.T) {
 
 	testEnv3 := setupMedusaTaskTestEnv(t, ctx)
 	defer testEnv3.Stop(t)
+	defer cancel()
 	t.Run("TestMedusaTasks", testEnv3.ControllerTest(ctx, testMedusaTasks))
 
 }
 
 func setupMedusaBackupTestEnv(t *testing.T, ctx context.Context) *testutils.MultiClusterTestEnv {
-	testEnv := &testutils.MultiClusterTestEnv{}
+	testEnv := &testutils.MultiClusterTestEnv{
+		BeforeTest: func(t *testing.T) {
+			managementApi.SetT(t)
+			managementApi.UseDefaultAdapter()
+		},
+	}
 	seedsResolver.callback = func(dc *cassdcapi.CassandraDatacenter) ([]string, error) {
 		return []string{}, nil
 	}
@@ -132,7 +137,12 @@ func setupMedusaBackupTestEnv(t *testing.T, ctx context.Context) *testutils.Mult
 //}
 
 func setupMedusaTaskTestEnv(t *testing.T, ctx context.Context) *testutils.MultiClusterTestEnv {
-	testEnv := &testutils.MultiClusterTestEnv{}
+	testEnv := &testutils.MultiClusterTestEnv{
+		BeforeTest: func(t *testing.T) {
+			managementApi.SetT(t)
+			managementApi.UseDefaultAdapter()
+		},
+	}
 	seedsResolver.callback = func(dc *cassdcapi.CassandraDatacenter) ([]string, error) {
 		return []string{}, nil
 	}

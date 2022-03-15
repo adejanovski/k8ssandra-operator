@@ -60,7 +60,7 @@ func (r *MedusaBackupJobReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	instance := &medusav1alpha1.MedusaBackupJob{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
-		logger.Error(err, "Failed to get CassandraBackup")
+		logger.Error(err, "Failed to get MedusaBackupJob")
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
@@ -85,7 +85,7 @@ func (r *MedusaBackupJobReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	// If there is anything in progress, simply requeue the request
 	if len(backup.Status.InProgress) > 0 {
-		logger.Info("CassandraBackup is being processed already", "Backup", req.NamespacedName)
+		logger.Info("MedusaBackupJob is being processed already", "Backup", req.NamespacedName)
 		return ctrl.Result{RequeueAfter: r.DefaultDelay}, nil
 	}
 
@@ -109,12 +109,8 @@ func (r *MedusaBackupJobReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		if !backup.Status.BackupSynced {
 			backupSynced := false
 			if requeue, err := r.syncBackups(ctx, backup); err != nil {
-				logger.Error(err, "Failed to prepare restore")
-				if requeue {
-					return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
-				} else {
-					return ctrl.Result{}, err
-				}
+				logger.Error(err, "Failed to sync backups")
+				return ctrl.Result{}, err
 			} else if requeue {
 				// Operation is still in progress
 				return ctrl.Result{RequeueAfter: r.DefaultDelay}, nil
@@ -128,7 +124,7 @@ func (r *MedusaBackupJobReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				}
 			}
 			if !backupSynced {
-				return ctrl.Result{RequeueAfter: r.DefaultDelay}, fmt.Errorf("failed to sync backups")
+				return ctrl.Result{}, fmt.Errorf("failed to sync backups")
 			}
 		}
 
@@ -183,7 +179,7 @@ func (r *MedusaBackupJobReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			go func() {
 				logger.Info("starting backup", "CassandraPod", pod.Name)
 				succeeded := false
-				if err := doMedusaBackup(ctx, backup.ObjectMeta.Name, backup.Spec.Type, &pod, r.ClientFactory); err == nil {
+				if err := doMedusaBackup(ctx, backup.ObjectMeta.Name, backup.Spec.Type, &pod, r.ClientFactory, logger); err == nil {
 					logger.Info("finished backup", "CassandraPod", pod.Name)
 					succeeded = true
 				} else {
@@ -263,7 +259,7 @@ func (r *MedusaBackupJobReconciler) syncBackups(ctx context.Context, backup *med
 	return true, nil
 }
 
-func doMedusaBackup(ctx context.Context, name string, backupType shared.BackupType, pod *corev1.Pod, clientFactory medusa.ClientFactory) error {
+func doMedusaBackup(ctx context.Context, name string, backupType shared.BackupType, pod *corev1.Pod, clientFactory medusa.ClientFactory, logger logr.Logger) error {
 	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, shared.BackupSidecarPort)
 	if medusaClient, err := clientFactory.NewClient(addr); err != nil {
 		return err

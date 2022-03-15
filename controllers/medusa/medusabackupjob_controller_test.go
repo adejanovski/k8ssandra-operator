@@ -186,6 +186,7 @@ func createAndVerifyMedusaBackup(dcKey framework.ClusterKey, dc *cassdcapi.Cassa
 
 	t.Log("verify that the backups are started")
 	require.Eventually(func() bool {
+		t.Logf("Requested backups: %v", medusaClientFactory.GetRequestedBackups())
 		updated := &api.MedusaBackupJob{}
 		err := f.Client.Get(context.Background(), backupKey, updated)
 		if err != nil {
@@ -197,6 +198,7 @@ func createAndVerifyMedusaBackup(dcKey framework.ClusterKey, dc *cassdcapi.Cassa
 
 	t.Log("verify the backup finished")
 	require.Eventually(func() bool {
+		t.Logf("Requested backups: %v", medusaClientFactory.GetRequestedBackups())
 		updated := &api.MedusaBackupJob{}
 		err := f.Client.Get(context.Background(), backupKey, updated)
 		if err != nil {
