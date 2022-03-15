@@ -77,7 +77,6 @@ DEPLOYMENT =
 # Indicates the number of kind clusters that are being used. Note that the clusters should
 # be created with scripts/setup-kind-multicluster.sh.
 NUM_CLUSTERS = 2
-NUM_WORKERS ?= 4
 
 ifeq ($(DEPLOYMENT), )
 	DEPLOY_TARGET =
@@ -231,10 +230,10 @@ cleanup:
 	done
 
 create-kind-cluster:
-	scripts/setup-kind-multicluster.sh --clusters 1 --kind-worker-nodes $(NUM_WORKERS)
+	scripts/setup-kind-multicluster.sh --clusters 1 --kind-worker-nodes 4
 
 create-kind-multicluster:
-	scripts/setup-kind-multicluster.sh --clusters $(NUM_CLUSTERS) --kind-worker-nodes $(NUM_WORKERS)
+	scripts/setup-kind-multicluster.sh --clusters $(NUM_CLUSTERS) --kind-worker-nodes 4
 
 kind-load-image-multi:
 	for ((i = 0; i < $(NUM_CLUSTERS); ++i)); do \
