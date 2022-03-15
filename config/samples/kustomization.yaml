@@ -4,4 +4,6 @@ resources:
 - _v1alpha1_stargate.yaml
 - k8ssandra.io_v1alpha1_replicatedsecret.yaml
 - medusa_v1alpha1_MedusaTask.yaml
+- medusa_v1alpha1_medusabackup.yaml
+- medusa_v1alpha1_medusabackupjob.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

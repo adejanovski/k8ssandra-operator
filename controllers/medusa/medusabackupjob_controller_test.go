@@ -2,27 +2,24 @@ package medusa
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	cassdcapi "github.com/k8ssandra/cass-operator/apis/cassandra/v1beta1"
 	k8ss "github.com/k8ssandra/k8ssandra-operator/apis/k8ssandra/v1alpha1"
 	api "github.com/k8ssandra/k8ssandra-operator/apis/medusa/v1alpha1"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/images"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/shared"
 	"github.com/k8ssandra/k8ssandra-operator/test/framework"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	backup1 = "backup1"
-	backup2 = "backup2"
-	backup3 = "backup3"
-)
-
-func testMedusaTasks(t *testing.T, ctx context.Context, f *framework.Framework, namespace string) {
+func testMedusaBackupDatacenter(t *testing.T, ctx context.Context, f *framework.Framework, namespace string) {
 	require := require.New(t)
 
 	k8sCtx0 := "cluster-0"
@@ -58,7 +55,6 @@ func testMedusaTasks(t *testing.T, ctx context.Context, f *framework.Framework, 
 					StorageSecretRef: corev1.LocalObjectReference{
 						Name: cassandraUserSecret,
 					},
-					MaxBackupCount: 1,
 				},
 				CassandraUserSecretRef: corev1.LocalObjectReference{
 					Name: cassandraUserSecret,
@@ -126,56 +122,90 @@ func testMedusaTasks(t *testing.T, ctx context.Context, f *framework.Framework, 
 	})
 	require.NoError(err, "failed to update dc1 status to ready")
 
-	backup1Created := createAndVerifyMedusaBackup(dc1Key, dc1, f, ctx, require, t, namespace, backup1)
-	require.True(backup1Created, "failed to create backup1")
-	backup2Created := createAndVerifyMedusaBackup(dc1Key, dc1, f, ctx, require, t, namespace, backup2)
-	require.True(backup2Created, "failed to create backup2")
-	backup3Created := createAndVerifyMedusaBackup(dc1Key, dc1, f, ctx, require, t, namespace, backup3)
-	require.True(backup3Created, "failed to create backup3")
+	backupCreated := createAndVerifyMedusaBackup(dc1Key, dc1, f, ctx, require, t, namespace, defaultBackupName)
+	require.True(backupCreated, "failed to create backup")
 
-	// Purge backups and verify that only one out of three remains
-	t.Log("purge backups")
-
-	purgeTask := &api.MedusaTask{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: namespace,
-			Name:      "purge-backups",
-		},
-		Spec: api.MedusaTaskSpec{
-			CassandraDatacenter: "dc1",
-			Operation:           "purge",
-		},
-	}
-
-	err = f.Client.Create(ctx, purgeTask)
-	require.NoError(err, "failed to create purge task")
-
-	purgeKey := types.NamespacedName{Namespace: namespace, Name: "purge-backups"}
-	require.Eventually(func() bool {
-		updated := &api.MedusaTask{}
-		err := f.Client.Get(context.Background(), purgeKey, updated)
-		if err != nil {
-			t.Logf("failed to get purge task: %v", err)
-			return false
-		}
-
-		return !updated.Status.FinishTime.IsZero() && updated.Status.Finished[0].NbBackupsPurged == 2
-	}, timeout, interval)
-
-	// After a purge, a sync should get created
-	purgeSyncKey := types.NamespacedName{Namespace: namespace, Name: "purge-backups-sync"}
-	require.Eventually(func() bool {
-		updated := &api.MedusaTask{}
-		err := f.Client.Get(context.Background(), purgeSyncKey, updated)
-		if err != nil {
-			t.Logf("failed to get sync task: %v", err)
-			return false
-		}
-
-		return !updated.Status.FinishTime.IsZero()
-	}, timeout, interval)
+	t.Log("verify that medusa gRPC clients are invoked")
+	require.Equal(map[string][]string{
+		fmt.Sprintf("%s:%d", getPodIpAddress(0), shared.BackupSidecarPort): {defaultBackupName},
+		fmt.Sprintf("%s:%d", getPodIpAddress(1), shared.BackupSidecarPort): {defaultBackupName},
+		fmt.Sprintf("%s:%d", getPodIpAddress(2), shared.BackupSidecarPort): {defaultBackupName},
+	}, medusaClientFactory.GetRequestedBackups())
 
 	err = f.DeleteK8ssandraCluster(ctx, client.ObjectKey{Namespace: kc.Namespace, Name: kc.Name})
 	require.NoError(err, "failed to delete K8ssandraCluster")
 	verifyObjectDoesNotExist(ctx, t, f, dc1Key, &cassdcapi.CassandraDatacenter{})
+}
+
+func createAndVerifyMedusaBackup(dcKey framework.ClusterKey, dc *cassdcapi.CassandraDatacenter, f *framework.Framework, ctx context.Context, require *require.Assertions, t *testing.T, namespace, backupName string) bool {
+	dcServiceKey := types.NamespacedName{Namespace: dcKey.Namespace, Name: dc.GetAllPodsServiceName()}
+	dcService := &corev1.Service{}
+	if err := f.Client.Get(ctx, dcServiceKey, dcService); err != nil {
+		if errors.IsNotFound(err) {
+			dcService = &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: dcServiceKey.Namespace,
+					Name:      dcServiceKey.Name,
+				},
+				Spec: corev1.ServiceSpec{
+					Selector: map[string]string{
+						cassdcapi.ClusterLabel: dc.Spec.ClusterName,
+					},
+					Ports: []corev1.ServicePort{
+						{
+							Name: "cql",
+							Port: 9042,
+						},
+					},
+				},
+			}
+
+			err := f.Client.Create(ctx, dcService)
+			require.NoError(err)
+		} else {
+			t.Errorf("failed to get service %s: %v", dcServiceKey, err)
+		}
+	}
+
+	createDatacenterPods(t, ctx, dc, f.Client)
+
+	t.Log("creating MedusaBackupJob")
+	backupKey := types.NamespacedName{Namespace: namespace, Name: backupName}
+	backup := &api.MedusaBackupJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      backupName,
+		},
+		Spec: api.MedusaBackupJobSpec{
+			CassandraDatacenter: dc.Name,
+		},
+	}
+
+	err := f.Client.Create(ctx, backup)
+	require.NoError(err, "failed to create MedusaBackupJob")
+
+	t.Log("verify that the backups are started")
+	require.Eventually(func() bool {
+		updated := &api.MedusaBackupJob{}
+		err := f.Client.Get(context.Background(), backupKey, updated)
+		if err != nil {
+			t.Logf("failed to get MedusaBackupJob: %v", err)
+			return false
+		}
+		return !updated.Status.StartTime.IsZero()
+	}, timeout, interval)
+
+	t.Log("verify the backup finished")
+	require.Eventually(func() bool {
+		updated := &api.MedusaBackupJob{}
+		err := f.Client.Get(context.Background(), backupKey, updated)
+		if err != nil {
+			return false
+		}
+		t.Logf("backup finish time: %v", updated.Status.FinishTime)
+		t.Logf("backup finished: %v", updated.Status.Finished)
+		t.Logf("backup in progress: %v", updated.Status.InProgress)
+		return !updated.Status.FinishTime.IsZero() && len(updated.Status.Finished) == 3 && len(updated.Status.InProgress) == 0
+	}, timeout, interval)
+	return true
 }

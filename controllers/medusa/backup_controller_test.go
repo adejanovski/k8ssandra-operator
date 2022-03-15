@@ -13,6 +13,7 @@ import (
 	replicationapi "github.com/k8ssandra/k8ssandra-operator/apis/replication/v1alpha1"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/images"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/medusa"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/shared"
 	"github.com/k8ssandra/k8ssandra-operator/test/framework"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,9 +139,9 @@ func testBackupDatacenter(t *testing.T, ctx context.Context, f *framework.Framew
 
 	t.Log("verify that medusa gRPC clients are invoked")
 	require.Equal(map[string][]string{
-		fmt.Sprintf("%s:%d", getPodIpAddress(0), backupSidecarPort): {defaultBackupName},
-		fmt.Sprintf("%s:%d", getPodIpAddress(1), backupSidecarPort): {defaultBackupName},
-		fmt.Sprintf("%s:%d", getPodIpAddress(2), backupSidecarPort): {defaultBackupName},
+		fmt.Sprintf("%s:%d", getPodIpAddress(0), shared.BackupSidecarPort): {defaultBackupName},
+		fmt.Sprintf("%s:%d", getPodIpAddress(1), shared.BackupSidecarPort): {defaultBackupName},
+		fmt.Sprintf("%s:%d", getPodIpAddress(2), shared.BackupSidecarPort): {defaultBackupName},
 	}, medusaClientFactory.GetRequestedBackups())
 
 	err = f.DeleteK8ssandraCluster(ctx, client.ObjectKey{Namespace: kc.Namespace, Name: kc.Name})
@@ -368,8 +369,8 @@ func createDatacenterPods(t *testing.T, ctx context.Context, dc *cassdcapi.Cassa
 								Image: "cassandra",
 							},
 							{
-								Name:  backupSidecarName,
-								Image: backupSidecarName,
+								Name:  shared.BackupSidecarName,
+								Image: shared.BackupSidecarName,
 							},
 						},
 					},

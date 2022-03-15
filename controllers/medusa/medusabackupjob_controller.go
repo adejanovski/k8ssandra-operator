@@ -1,6 +1,5 @@
 /*
-
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,11 +21,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/go-logr/logr"
-	"github.com/k8ssandra/k8ssandra-operator/pkg/config"
-	"github.com/k8ssandra/k8ssandra-operator/pkg/medusa"
-	"github.com/k8ssandra/k8ssandra-operator/pkg/shared"
-	"github.com/k8ssandra/k8ssandra-operator/pkg/utils"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,30 +30,34 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	cassdcapi "github.com/k8ssandra/cass-operator/apis/cassandra/v1beta1"
-	medusaapi "github.com/k8ssandra/k8ssandra-operator/apis/medusa/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
+	medusav1alpha1 "github.com/k8ssandra/k8ssandra-operator/apis/medusa/v1alpha1"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/config"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/medusa"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/shared"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/utils"
 )
 
-// CassandraBackupReconciler reconciles a CassandraBackup object
-type CassandraBackupReconciler struct {
+// MedusaBackupJobReconciler reconciles a MedusaBackupJob object
+type MedusaBackupJobReconciler struct {
 	*config.ReconcilerConfig
 	client.Client
 	Scheme *runtime.Scheme
 	medusa.ClientFactory
 }
 
-// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=cassandrabackups,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=cassandrabackups/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=cassandradatacenters,verbs=get;list;watch
+// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusabackupjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusabackupjobs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusabackupjobs/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",namespace="k8ssandra",resources=pods;services,verbs=get;list;watch
 
-func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.FromContext(ctx).WithValues("cassandrabackup", req.NamespacedName)
+func (r *MedusaBackupJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx).WithValues("medusabackupjob", req.NamespacedName)
 
 	logger.Info("Starting reconciliation")
 
-	instance := &medusaapi.CassandraBackup{}
+	instance := &medusav1alpha1.MedusaBackupJob{}
 	err := r.Get(ctx, req.NamespacedName, instance)
 	if err != nil {
 		logger.Error(err, "Failed to get CassandraBackup")
@@ -91,7 +90,7 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	// If the backup is already finished, there is nothing to do.
-	if backupFinished(backup) {
+	if medusaBackupFinished(backup) {
 		logger.Info("Backup operation is already finished")
 		return ctrl.Result{Requeue: false}, nil
 	}
@@ -105,6 +104,33 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 
 		logger.Info("backup complete")
+
+		// The MedusaBackupJob is finished and we now need to perform a sync to create the corresponding MedusaBackup object.
+		if !backup.Status.BackupSynced {
+			backupSynced := false
+			if requeue, err := r.syncBackups(ctx, backup); err != nil {
+				logger.Error(err, "Failed to prepare restore")
+				if requeue {
+					return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
+				} else {
+					return ctrl.Result{}, err
+				}
+			} else if requeue {
+				// Operation is still in progress
+				return ctrl.Result{RequeueAfter: r.DefaultDelay}, nil
+			} else {
+				backupSynced = true
+				patch := client.MergeFrom(backup.DeepCopy())
+				backup.Status.BackupSynced = true
+				if err := r.Status().Patch(ctx, backup, patch); err != nil {
+					logger.Error(err, "failed to patch status with backupSynced")
+					return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
+				}
+			}
+			if !backupSynced {
+				return ctrl.Result{RequeueAfter: r.DefaultDelay}, fmt.Errorf("failed to sync backups")
+			}
+		}
 
 		// Set the finish time
 		// Note that the time here is not accurate, but that is ok. For now we are just
@@ -131,10 +157,11 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	patch := client.MergeFromWithOptions(backup.DeepCopy(), client.MergeFromWithOptimisticLock{})
 
 	backup.Status.StartTime = metav1.Now()
+	backup.Status.BackupSynced = false
 	for _, pod := range pods {
 		backup.Status.InProgress = append(backup.Status.InProgress, pod.Name)
 	}
-	logger.Info("checking status", "CassandraDatacenterTemplateSpec", backup.Status.CassdcTemplateSpec)
+
 	if err := r.Status().Patch(ctx, backup, patch); err != nil {
 		logger.Error(err, "Failed to patch status")
 		// We received a stale object, requeue for next processing
@@ -156,7 +183,7 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			go func() {
 				logger.Info("starting backup", "CassandraPod", pod.Name)
 				succeeded := false
-				if err := doBackup(ctx, backup.Spec.Name, backup.Spec.Type, &pod, r.ClientFactory); err == nil {
+				if err := doMedusaBackup(ctx, backup.ObjectMeta.Name, backup.Spec.Type, &pod, r.ClientFactory); err == nil {
 					logger.Info("finished backup", "CassandraPod", pod.Name)
 					succeeded = true
 				} else {
@@ -183,7 +210,7 @@ func (r *CassandraBackupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	return ctrl.Result{RequeueAfter: r.DefaultDelay}, nil
 }
 
-func (r *CassandraBackupReconciler) getCassandraDatacenterPods(ctx context.Context, cassdc *cassdcapi.CassandraDatacenter, logger logr.Logger) ([]corev1.Pod, error) {
+func (r *MedusaBackupJobReconciler) getCassandraDatacenterPods(ctx context.Context, cassdc *cassdcapi.CassandraDatacenter, logger logr.Logger) ([]corev1.Pod, error) {
 	podList := &corev1.PodList{}
 	labels := client.MatchingLabels{cassdcapi.DatacenterLabel: cassdc.Name}
 	if err := r.List(ctx, podList, labels); err != nil {
@@ -192,14 +219,51 @@ func (r *CassandraBackupReconciler) getCassandraDatacenterPods(ctx context.Conte
 	}
 
 	pods := make([]corev1.Pod, 0)
-	for _, pod := range podList.Items {
-		pods = append(pods, pod)
-	}
+	pods = append(pods, podList.Items...)
 
 	return pods, nil
 }
 
-func doBackup(ctx context.Context, name string, backupType shared.BackupType, pod *corev1.Pod, clientFactory medusa.ClientFactory) error {
+func (r *MedusaBackupJobReconciler) syncBackups(ctx context.Context, backup *medusav1alpha1.MedusaBackupJob) (bool, error) {
+	// Create a prepare_restore medusa task to create the mapping files in each pod.
+	// Returns true if the reconcile needs to be requeued, false otherwise.
+	syncTaskName := backup.ObjectMeta.Name + "-sync"
+	sync := &medusav1alpha1.MedusaTask{}
+	if err := r.Client.Get(context.Background(), types.NamespacedName{Name: syncTaskName, Namespace: backup.ObjectMeta.Namespace}, sync); err != nil {
+		if errors.IsNotFound(err) {
+			// Create the sync task
+			sync = &medusav1alpha1.MedusaTask{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      syncTaskName,
+					Namespace: backup.ObjectMeta.Namespace,
+				},
+				Spec: medusav1alpha1.MedusaTaskSpec{
+					Operation:           medusav1alpha1.OperationTypeSync,
+					CassandraDatacenter: backup.Spec.CassandraDatacenter,
+				},
+			}
+			if err := r.Client.Create(context.Background(), sync); err != nil {
+				return true, err
+			}
+		} else {
+			return true, err
+		}
+	} else {
+		if !sync.Status.FinishTime.IsZero() {
+			// Prepare is finished
+			return false, nil
+		}
+		if len(sync.Status.InProgress) == 0 {
+			// No more pods are running the task but finish time is not set.
+			// This means the task failed.
+			return false, fmt.Errorf("sync task failed for backup %s", backup.ObjectMeta.Name)
+		}
+	}
+	// The operation is still in progress
+	return true, nil
+}
+
+func doMedusaBackup(ctx context.Context, name string, backupType shared.BackupType, pod *corev1.Pod, clientFactory medusa.ClientFactory) error {
 	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, shared.BackupSidecarPort)
 	if medusaClient, err := clientFactory.NewClient(addr); err != nil {
 		return err
@@ -209,12 +273,13 @@ func doBackup(ctx context.Context, name string, backupType shared.BackupType, po
 	}
 }
 
-func backupFinished(backup *medusaapi.CassandraBackup) bool {
+func medusaBackupFinished(backup *medusav1alpha1.MedusaBackupJob) bool {
 	return !backup.Status.FinishTime.IsZero()
 }
 
-func (r *CassandraBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+// SetupWithManager sets up the controller with the Manager.
+func (r *MedusaBackupJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&medusaapi.CassandraBackup{}).
+		For(&medusav1alpha1.MedusaBackupJob{}).
 		Complete(r)
 }

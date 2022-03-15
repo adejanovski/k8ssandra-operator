@@ -37,6 +37,7 @@ import (
 	medusav1alpha1 "github.com/k8ssandra/k8ssandra-operator/apis/medusa/v1alpha1"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/config"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/medusa"
+	"github.com/k8ssandra/k8ssandra-operator/pkg/shared"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/utils"
 )
 
@@ -285,32 +286,30 @@ func (r *MedusaTaskReconciler) syncOperation(ctx context.Context, task *medusav1
 				logger.Info("Syncing Backup", "Backup", backup.BackupName)
 				// Create backups that should exist but are missing
 				backupKey := types.NamespacedName{Namespace: task.Namespace, Name: backup.BackupName}
-				backupResource := &medusav1alpha1.CassandraBackup{}
+				backupResource := &medusav1alpha1.MedusaBackup{}
 				if err := r.Get(ctx, backupKey, backupResource); err != nil {
 					if errors.IsNotFound(err) {
 						// Backup doesn't exist, create it
 						logger.Info("Creating Cassandra Backup", "Backup", backup.BackupName)
 						startTime := metav1.Unix(backup.StartTime, 0)
 						finishTime := metav1.Unix(backup.FinishTime, 0)
-						backupResource = &medusav1alpha1.CassandraBackup{
+						backupResource = &medusav1alpha1.MedusaBackup{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      backup.BackupName,
 								Namespace: task.Namespace,
 							},
-							Spec: medusav1alpha1.CassandraBackupSpec{
-								Name:                backup.BackupName,
+							Spec: medusav1alpha1.MedusaBackupSpec{
 								CassandraDatacenter: task.Spec.CassandraDatacenter,
-								Type:                medusav1alpha1.BackupType(backup.BackupType),
-								CreatedBySync:       true,
+								Type:                shared.BackupType(backup.BackupType),
 							},
 						}
 						if err := r.Create(ctx, backupResource); err != nil {
-							logger.Error(err, "failed to create backup", "CassandraBackup", backup.BackupName)
+							logger.Error(err, "failed to create backup", "MedusaBackup", backup.BackupName)
 							return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
 						} else {
-							logger.Info("Created Cassandra Backup", "Backup", backupResource)
+							logger.Info("Created Medusa Backup", "Backup", backupResource)
 							// Read the backup again. Multiple attempts may be necessary due to caches, which is why the Get operation is in a loop.
-							backupInstance := &medusav1alpha1.CassandraBackup{}
+							backupInstance := &medusav1alpha1.MedusaBackup{}
 							found := false
 							for stay, timeout := true, time.After(10*time.Second); stay; {
 								err := r.Get(ctx, backupKey, backupInstance)
@@ -327,7 +326,7 @@ func (r *MedusaTaskReconciler) syncOperation(ctx context.Context, task *medusav1
 								}
 							}
 							if !found {
-								logger.Error(err, "failed to read backup", "CassandraBackup", backup.BackupName)
+								logger.Error(err, "failed to read backup", "MedusaBackup", backup.BackupName)
 								return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
 							}
 							backupPatch := client.MergeFrom(backupInstance.DeepCopy())
@@ -347,19 +346,19 @@ func (r *MedusaTaskReconciler) syncOperation(ctx context.Context, task *medusav1
 			}
 
 			// Delete backups that don't exist remotely but are found locally
-			localBackups := &medusav1alpha1.CassandraBackupList{}
+			localBackups := &medusav1alpha1.MedusaBackupList{}
 			if err = r.List(ctx, localBackups, client.InNamespace(task.Namespace)); err != nil {
 				logger.Error(err, "failed to list backups")
 				return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
 			}
 			for _, backup := range localBackups.Items {
-				if !backupExistsRemotely(remoteBackups, backup.Spec.Name) {
-					logger.Info("Deleting Cassandra Backup", "Backup", backup.Spec.Name)
+				if !backupExistsRemotely(remoteBackups, backup.ObjectMeta.Name) {
+					logger.Info("Deleting Cassandra Backup", "Backup", backup.ObjectMeta.Name)
 					if err := r.Delete(ctx, &backup); err != nil {
-						logger.Error(err, "failed to delete backup", "CassandraBackup", backup.Spec.Name)
+						logger.Error(err, "failed to delete backup", "MedusaBackup", backup.ObjectMeta.Name)
 						return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
 					} else {
-						logger.Info("Deleted Cassandra Backup", "Backup", backup.Spec.Name)
+						logger.Info("Deleted Cassandra Backup", "Backup", backup.ObjectMeta.Name)
 					}
 				}
 			}
@@ -410,7 +409,7 @@ func (r *MedusaTaskReconciler) scheduleSyncForPurge(task *medusav1alpha1.MedusaT
 }
 
 func doPurge(ctx context.Context, pod *corev1.Pod, clientFactory medusa.ClientFactory) (*medusa.PurgeBackupsResponse, error) {
-	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, backupSidecarPort)
+	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, shared.BackupSidecarPort)
 	if medusaClient, err := clientFactory.NewClient(addr); err != nil {
 		return nil, err
 	} else {
@@ -420,7 +419,7 @@ func doPurge(ctx context.Context, pod *corev1.Pod, clientFactory medusa.ClientFa
 }
 
 func prepareRestore(ctx context.Context, task *medusav1alpha1.MedusaTask, pod *corev1.Pod, clientFactory medusa.ClientFactory) error {
-	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, backupSidecarPort)
+	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, shared.BackupSidecarPort)
 	if medusaClient, err := clientFactory.NewClient(addr); err != nil {
 		return err
 	} else {
@@ -431,22 +430,13 @@ func prepareRestore(ctx context.Context, task *medusav1alpha1.MedusaTask, pod *c
 }
 
 func getBackups(ctx context.Context, pod *corev1.Pod, clientFactory medusa.ClientFactory) ([]*medusa.BackupSummary, error) {
-	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, backupSidecarPort)
+	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, shared.BackupSidecarPort)
 	if medusaClient, err := clientFactory.NewClient(addr); err != nil {
 		return nil, err
 	} else {
 		defer medusaClient.Close()
 		return medusaClient.GetBackups(ctx)
 	}
-}
-
-func backupExistsLocally(backups medusav1alpha1.CassandraBackupList, backupName string) bool {
-	for _, backup := range backups.Items {
-		if backup.Name == backupName {
-			return true
-		}
-	}
-	return false
 }
 
 func backupExistsRemotely(backups []*medusa.BackupSummary, backupName string) bool {

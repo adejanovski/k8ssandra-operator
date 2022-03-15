@@ -1,5 +1,5 @@
 /*
-
+Copyright 2021.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	cassdcapi "github.com/k8ssandra/cass-operator/apis/cassandra/v1beta1"
 	"github.com/k8ssandra/k8ssandra-operator/pkg/shared"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,12 +24,8 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// CassandraBackupSpec defines the desired state of CassandraBackup
-type CassandraBackupSpec struct {
-	// The name of the backup.
-	// TODO document format of generated name
-	Name string `json:"name,omitempty"`
-
+// MedusaBackupJobSpec defines the desired state of MedusaBackupJob
+type MedusaBackupJobSpec struct {
 	// The name of the CassandraDatacenter to back up
 	CassandraDatacenter string `json:"cassandraDatacenter"`
 
@@ -40,18 +35,8 @@ type CassandraBackupSpec struct {
 	Type shared.BackupType `json:"backupType,omitempty"`
 }
 
-type CassandraDatacenterTemplateSpec struct {
-	// Standard object metadata
-	// +optional
-	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-
-	Spec cassdcapi.CassandraDatacenterSpec `json:"spec"`
-}
-
-// CassandraBackupStatus defines the observed state of CassandraBackup
-type CassandraBackupStatus struct {
-	CassdcTemplateSpec *CassandraDatacenterTemplateSpec `json:"cassdcTemplateSpec,omitempty"`
-
+// MedusaBackupJobStatus defines the observed state of MedusaBackupJob
+type MedusaBackupJobStatus struct {
 	StartTime metav1.Time `json:"startTime,omitempty"`
 
 	FinishTime metav1.Time `json:"finishTime,omitempty"`
@@ -61,29 +46,31 @@ type CassandraBackupStatus struct {
 	Finished []string `json:"finished,omitempty"`
 
 	Failed []string `json:"failed,omitempty"`
+
+	BackupSynced bool `json:"backupSynced,omitempty"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
+//+kubebuilder:object:root=true
+//+kubebuilder:subresource:status
 
-// CassandraBackup is the Schema for the cassandrabackups API
-type CassandraBackup struct {
+// MedusaBackupJob is the Schema for the medusabackupjobs API
+type MedusaBackupJob struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   CassandraBackupSpec   `json:"spec,omitempty"`
-	Status CassandraBackupStatus `json:"status,omitempty"`
+	Spec   MedusaBackupJobSpec   `json:"spec,omitempty"`
+	Status MedusaBackupJobStatus `json:"status,omitempty"`
 }
 
-// +kubebuilder:object:root=true
+//+kubebuilder:object:root=true
 
-// CassandraBackupList contains a list of CassandraBackup
-type CassandraBackupList struct {
+// MedusaBackupJobList contains a list of MedusaBackupJob
+type MedusaBackupJobList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []CassandraBackup `json:"items"`
+	Items           []MedusaBackupJob `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&CassandraBackup{}, &CassandraBackupList{})
+	SchemeBuilder.Register(&MedusaBackupJob{}, &MedusaBackupJobList{})
 }
