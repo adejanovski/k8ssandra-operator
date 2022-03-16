@@ -261,9 +261,11 @@ func (r *MedusaBackupJobReconciler) syncBackups(ctx context.Context, backup *med
 
 func doMedusaBackup(ctx context.Context, name string, backupType shared.BackupType, pod *corev1.Pod, clientFactory medusa.ClientFactory, logger logr.Logger) error {
 	addr := fmt.Sprintf("%s:%d", pod.Status.PodIP, shared.BackupSidecarPort)
+	logger.Info("connecting to backup sidecar", "Pod", pod.Name, "Address", addr)
 	if medusaClient, err := clientFactory.NewClient(addr); err != nil {
 		return err
 	} else {
+		logger.Info("successfully connected to backup sidecar", "Pod", pod.Name, "Address", addr)
 		defer medusaClient.Close()
 		return medusaClient.CreateBackup(ctx, name, string(backupType))
 	}

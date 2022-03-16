@@ -273,14 +273,18 @@ func NewMedusaClientFactory() *fakeMedusaClientFactory {
 }
 
 func (f *fakeMedusaClientFactory) NewClient(address string) (medusa.Client, error) {
-	medusaClient := newFakeMedusaClient()
 	f.clientsMutex.Lock()
-	f.clients[address] = medusaClient
-	f.clientsMutex.Unlock()
-	return medusaClient, nil
+	defer f.clientsMutex.Unlock()
+	_, ok := f.clients[address]
+	if !ok {
+		f.clients[address] = newFakeMedusaClient()
+	}
+	return f.clients[address], nil
 }
 
 func (f *fakeMedusaClientFactory) GetRequestedBackups() map[string][]string {
+	f.clientsMutex.Lock()
+	defer f.clientsMutex.Unlock()
 	requestedBackups := make(map[string][]string)
 	for k, v := range f.clients {
 		requestedBackups[k] = v.RequestedBackups
