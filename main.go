@@ -252,6 +252,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MedusaBackupJob")
 		os.Exit(1)
 	}
+	if err = (&medusacontrollers.MedusaRestoreJobReconciler{
+		ReconcilerConfig: reconcilerConfig,
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		ClientFactory:    &medusa.DefaultFactory{},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MedusaRestoreJob")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
