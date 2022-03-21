@@ -189,10 +189,10 @@ func (r *CassandraRestoreReconciler) applyUpdatesAndRequeue(ctx context.Context,
 // updateRestoreInitContainer sets the backup name and restore key env vars in the restore
 // init container. An error is returned if the container is not found.
 func updateRestoreInitContainer(req *medusa.RestoreRequest) error {
-	if err := setBackupNameInRestoreContainer(req.Backup.Spec.Name, req.Datacenter); err != nil {
+	if err := setBackupNameInRestoreContainer(req.MedusaBackup.ObjectMeta.Name, req.Datacenter); err != nil {
 		return err
 	}
-	return setRestoreKeyInRestoreContainer(req.Restore.Status.RestoreKey, req.Datacenter)
+	return setRestoreKeyInRestoreContainer(req.RestoreJob.Status.RestoreKey, req.Datacenter)
 }
 
 // podTemplateSpecUpdateComplete checks that the pod template spec changes, namely the ones
@@ -292,26 +292,6 @@ func stopDatacenter(req *medusa.RestoreRequest) bool {
 	req.Log.Info("Stopping datacenter")
 	req.Datacenter.Spec.Stopped = true
 	return false
-}
-
-func buildNewCassandraDatacenter(restore *medusaapi.CassandraRestore, backup *medusaapi.CassandraBackup) (*cassdcapi.CassandraDatacenter, error) {
-	newCassdc := &cassdcapi.CassandraDatacenter{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: backup.Namespace,
-			Name:      restore.Spec.CassandraDatacenter.Name,
-		},
-		Spec: backup.Status.CassdcTemplateSpec.Spec,
-	}
-
-	if err := setBackupNameInRestoreContainer(backup.Spec.Name, newCassdc); err != nil {
-		return nil, err
-	}
-
-	if err := setRestoreKeyInRestoreContainer(restore.Status.RestoreKey, newCassdc); err != nil {
-		return nil, err
-	}
-
-	return newCassdc, nil
 }
 
 func setBackupNameInRestoreContainer(backupName string, cassdc *cassdcapi.CassandraDatacenter) error {

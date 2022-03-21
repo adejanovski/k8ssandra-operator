@@ -45,8 +45,8 @@ type MedusaRestoreJobReconciler struct {
 	medusa.ClientFactory
 }
 
-// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusarestores,verbs=get;list;watch;update;patch;delete
-// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusarestores/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusarestorejobs,verbs=get;list;watch;update;patch;delete
+// +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusarestorejobs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=medusa.k8ssandra.io,namespace="k8ssandra",resources=medusabackups,verbs=get;list;watch
 // +kubebuilder:rbac:groups=cassandra.datastax.com,namespace="k8ssandra",resources=cassandradatacenters,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,namespace="k8ssandra",resources=statefulsets,verbs=list;watch
@@ -54,19 +54,20 @@ type MedusaRestoreJobReconciler struct {
 func (r *MedusaRestoreJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx).WithValues("medusarestorejob", req.NamespacedName)
 	factory := medusa.NewFactory(r.Client, logger)
-	request, result, err := factory.NewRestoreRequest(ctx, req.NamespacedName)
+	logger.Info("Starting reconcile", "MedusaRestoreJob", req.NamespacedName.Name)
+	request, result, err := factory.NewMedusaRestoreRequest(ctx, req.NamespacedName)
 
 	if result != nil {
 		return *result, err
 	}
 
-	if request.Restore.Status.StartTime.IsZero() {
-		request.SetRestoreStartTime(metav1.Now())
-		request.SetRestoreKey(uuid.New().String())
-		request.SetRestorePrepared(false)
+	if request.RestoreJob.Status.StartTime.IsZero() {
+		request.SetMedusaRestoreStartTime(metav1.Now())
+		request.SetMedusaRestoreKey(uuid.New().String())
+		request.SetMedusaRestorePrepared(false)
 	}
 
-	cassdcKey := types.NamespacedName{Namespace: request.Restore.Namespace, Name: request.Datacenter.Name}
+	cassdcKey := types.NamespacedName{Namespace: request.RestoreJob.Namespace, Name: request.Datacenter.Name}
 	cassdc := &cassdcapi.CassandraDatacenter{}
 	err = r.Get(ctx, cassdcKey, cassdc)
 	if err != nil {
@@ -75,7 +76,7 @@ func (r *MedusaRestoreJobReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Prepare the restore by placing a mapping file in the Cassandra data volume.
-	if !request.Restore.Status.RestorePrepared {
+	if !request.RestoreJob.Status.RestorePrepared {
 		restorePrepared := false
 		if requeue, err := r.prepareRestore(ctx, request); err != nil {
 			logger.Error(err, "Failed to prepare restore")
@@ -89,16 +90,16 @@ func (r *MedusaRestoreJobReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return r.applyUpdatesAndRequeue(ctx, request)
 		} else {
 			restorePrepared = true
-			request.SetRestorePrepared(restorePrepared)
+			request.SetMedusaRestorePrepared(restorePrepared)
 		}
 		if !restorePrepared {
-			logger.Error(fmt.Errorf("failed to prepare restore"), request.Restore.Status.RestoreKey)
+			logger.Error(fmt.Errorf("failed to prepare restore"), request.RestoreJob.Status.RestoreKey)
 			return r.applyUpdatesAndRequeue(ctx, request)
 		}
 	}
 
-	if request.Restore.Spec.Shutdown && request.Restore.Status.DatacenterStopped.IsZero() {
-		if stopped := stopDatacenter(request); !stopped {
+	if request.RestoreJob.Status.DatacenterStopped.IsZero() {
+		if stopped := stopDatacenterRestoreJob(request); !stopped {
 			return r.applyUpdatesAndRequeue(ctx, request)
 		}
 	}
@@ -137,7 +138,7 @@ func (r *MedusaRestoreJobReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return r.applyUpdatesAndRequeue(ctx, request)
 	}
 
-	request.SetRestoreFinishTime(metav1.Now())
+	request.SetMedusaRestoreFinishTime(metav1.Now())
 	if err := r.applyUpdates(ctx, request); err != nil {
 		return ctrl.Result{RequeueAfter: r.DefaultDelay}, err
 	}
@@ -159,8 +160,8 @@ func (r *MedusaRestoreJobReconciler) applyUpdates(ctx context.Context, req *medu
 		}
 	}
 
-	if req.RestoreModified() {
-		if err := r.Status().Patch(ctx, req.Restore, req.GetRestorePatch()); err != nil {
+	if req.MedusaRestoreModified() {
+		if err := r.Status().Patch(ctx, req.RestoreJob, req.GetRestorePatch()); err != nil {
 			req.Log.Error(err, "Failed to patch the MedusaRestoreJob")
 			return err
 		}
@@ -181,7 +182,7 @@ func (r *MedusaRestoreJobReconciler) applyUpdatesAndRequeue(ctx context.Context,
 // with the restore container, have been pushed down to the StatefulSets. Return true if
 // the changes have been applied.
 func (r *MedusaRestoreJobReconciler) podTemplateSpecUpdateComplete(ctx context.Context, req *medusa.RestoreRequest) (bool, error) {
-	if updated := cassandra.DatacenterUpdatedAfter(req.Restore.Status.DatacenterStopped.Time, req.Datacenter); !updated {
+	if updated := cassandra.DatacenterUpdatedAfter(req.RestoreJob.Status.DatacenterStopped.Time, req.Datacenter); !updated {
 		return false, nil
 	}
 
@@ -205,11 +206,11 @@ func (r *MedusaRestoreJobReconciler) podTemplateSpecUpdateComplete(ctx context.C
 			return false, nil
 		}
 
-		if !containerHasEnvVar(container, backupNameEnvVar, req.Backup.Spec.Name) {
+		if !containerHasEnvVar(container, backupNameEnvVar, req.MedusaBackup.ObjectMeta.Name) {
 			return false, nil
 		}
 
-		if !containerHasEnvVar(container, restoreKeyEnvVar, req.Restore.Status.RestoreKey) {
+		if !containerHasEnvVar(container, restoreKeyEnvVar, req.RestoreJob.Status.RestoreKey) {
 			return false, nil
 		}
 	}
@@ -221,19 +222,19 @@ func (r *MedusaRestoreJobReconciler) prepareRestore(ctx context.Context, request
 	// Create a prepare_restore medusa task to create the mapping files in each pod.
 	// Returns true if the reconcile needs to be requeued, false otherwise.
 	prepare := &medusav1alpha1.MedusaTask{}
-	if err := r.Client.Get(context.Background(), types.NamespacedName{Name: request.Restore.Status.RestoreKey, Namespace: request.Restore.Namespace}, prepare); err != nil {
+	if err := r.Client.Get(context.Background(), types.NamespacedName{Name: request.RestoreJob.Status.RestoreKey, Namespace: request.RestoreJob.Namespace}, prepare); err != nil {
 		if errors.IsNotFound(err) {
 			// Create the sync task
 			prepare = &medusav1alpha1.MedusaTask{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      request.Restore.Status.RestoreKey,
-					Namespace: request.Restore.Namespace,
+					Name:      request.RestoreJob.Status.RestoreKey,
+					Namespace: request.RestoreJob.Namespace,
 				},
 				Spec: medusav1alpha1.MedusaTaskSpec{
 					Operation:           medusav1alpha1.OperationTypePrepareRestore,
-					CassandraDatacenter: request.Restore.Spec.CassandraDatacenter.Name,
-					BackupName:          request.Backup.Spec.Name,
-					RestoreKey:          request.Restore.Status.RestoreKey,
+					CassandraDatacenter: request.RestoreJob.Spec.CassandraDatacenter,
+					BackupName:          request.MedusaBackup.ObjectMeta.Name,
+					RestoreKey:          request.RestoreJob.Status.RestoreKey,
 				},
 			}
 			if err := r.Client.Create(context.Background(), prepare); err != nil {
@@ -250,11 +251,30 @@ func (r *MedusaRestoreJobReconciler) prepareRestore(ctx context.Context, request
 		if len(prepare.Status.InProgress) == 0 {
 			// No more pods are running the task but finish time is not set.
 			// This means the task failed.
-			return false, fmt.Errorf("prepare restore task failed for restore %s", request.Restore.Name)
+			return false, fmt.Errorf("prepare restore task failed for restore %s", request.RestoreJob.Name)
 		}
 	}
 	// The operation is still in progress
 	return true, nil
+}
+
+// stopDatacenter sets the Stopped property in the Datacenter spec to true. Returns true if
+// the datacenter is stopped.
+func stopDatacenterRestoreJob(req *medusa.RestoreRequest) bool {
+	if cassandra.DatacenterStopped(req.Datacenter) {
+		req.Log.Info("The datacenter is stopped", "Status", req.Datacenter.Status)
+		req.SetDatacenterStoppedTimeRestoreJob(metav1.Now())
+		return true
+	}
+
+	if cassandra.DatacenterStopping(req.Datacenter) {
+		req.Log.Info("Waiting for datacenter to stop")
+		return false
+	}
+
+	req.Log.Info("Stopping datacenter")
+	req.Datacenter.Spec.Stopped = true
+	return false
 }
 
 // SetupWithManager sets up the controller with the Manager.

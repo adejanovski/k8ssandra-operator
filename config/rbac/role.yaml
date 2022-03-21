@@ -256,6 +256,25 @@ rules:
 - apiGroups:
   - medusa.k8ssandra.io
   resources:
+  - medusarestorejobs
+  verbs:
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - medusa.k8ssandra.io
+  resources:
+  - medusarestorejobs/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - medusa.k8ssandra.io
+  resources:
   - medusatasks
   verbs:
   - create
