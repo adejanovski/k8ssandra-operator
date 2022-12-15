@@ -7,6 +7,6 @@ resources:
   - ../../default
 
 images:
-  - name: k8ssandra/k8ssandra-operator
-    newTag: latest
+  - name: adejanovski/k8ssandra-operator
+    newTag: vector
 
