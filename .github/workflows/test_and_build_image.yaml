@@ -50,7 +50,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
   build_image:
-    name: Build and push image to Docker Hub
+    name: Publish to Docker Hub and Helm
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
     steps:
@@ -97,3 +97,6 @@ jobs:
           platforms: linux/amd64
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
+      - name: Helm release
+        if: github.event_name != 'pull_request'
+        uses: ./.github/workflows/helm_release.yaml
