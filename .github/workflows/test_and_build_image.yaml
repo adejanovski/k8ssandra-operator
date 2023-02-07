@@ -101,7 +101,8 @@ jobs:
     name: Helm release
     runs-on: ubuntu-latest
     needs: unit_integration_tests
+    steps:
       - name: Helm release
         uses: ./.github/workflows/helm_release.yaml
-          with:
-            helm_repo: next
+        with:
+          helm_repo: next
