@@ -50,7 +50,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
   build_image:
-    name: Publish to image to Docker Hub
+    name: Publish image to Docker Hub
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
     steps:
