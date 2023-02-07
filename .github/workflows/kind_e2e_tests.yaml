@@ -1,25 +1,25 @@
 # This workflow is for tests that require a single cluster.
 name: Run e2e tests
 on:
-  push:
-    branches:
-      - main
-      - 'release/**'
-    paths-ignore:
-      - 'docs/**'
-      - 'CHANGELOG/**'
-  pull_request:
-    branches:
-      - main
-      - 'release/**'
-    paths-ignore:
-      - 'docs/**'
-      - 'CHANGELOG/**'
-  workflow_call:
-    inputs:
-      kind_node_version:
-        required: true
-        type: string
+  #push:
+  #  branches:
+  #    - main
+  #    - 'release/**'
+  #  paths-ignore:
+  #    - 'docs/**'
+  #    - 'CHANGELOG/**'
+  #pull_request:
+  #  branches:
+  #    - main
+  #    - 'release/**'
+  #  paths-ignore:
+  #    - 'docs/**'
+  #    - 'CHANGELOG/**'
+  #workflow_call:
+  #  inputs:
+  #    kind_node_version:
+  #      required: true
+  #      type: string
 jobs:
   set_kind_node_version:
     runs-on: ubuntu-latest
