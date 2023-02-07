@@ -54,4 +54,6 @@ jobs:
   helm-release:
     needs: release_k8ssandra_operator
     uses: ./.github/workflows/helm_release.yaml
+      with:
+        helm_repo: stable
       
